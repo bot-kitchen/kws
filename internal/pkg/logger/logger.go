@@ -27,6 +27,9 @@ func New(cfg config.LoggingConfig) (*Logger, error) {
 		level = zapcore.InfoLevel
 	}
 
+	// Determine if output is to a file (no colors) or stdout (colors allowed)
+	isFileOutput := cfg.Output != "" && cfg.Output != "stdout"
+
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:        "timestamp",
 		LevelKey:       "level",
@@ -42,9 +45,13 @@ func New(cfg config.LoggingConfig) (*Logger, error) {
 		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
 
+	// Disable colors for file output or JSON format
+	if isFileOutput || cfg.Format == "json" {
+		encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
+	}
+
 	var encoder zapcore.Encoder
 	if cfg.Format == "json" {
-		encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
 		encoder = zapcore.NewJSONEncoder(encoderConfig)
 	} else {
 		encoder = zapcore.NewConsoleEncoder(encoderConfig)

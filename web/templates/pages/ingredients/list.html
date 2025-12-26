@@ -130,12 +130,18 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Moisture Type</label>
-                        <select name="moisture_type" required
-                                class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-border-dark bg-gray-50 dark:bg-surface-highlight text-gray-900 dark:text-white focus:ring-2 focus:ring-primary">
-                            <option value="dry">Dry</option>
-                            <option value="wet">Wet</option>
-                            <option value="liquid">Liquid</option>
-                        </select>
+                        <input type="hidden" name="moisture_type" id="moisture-type-input" value="dry" required>
+                        <div class="flex rounded-lg border border-gray-300 dark:border-border-dark overflow-hidden">
+                            <button type="button" data-value="dry" class="moisture-btn flex-1 px-3 py-2 text-sm font-medium bg-primary text-white transition-colors">
+                                Dry
+                            </button>
+                            <button type="button" data-value="wet" class="moisture-btn flex-1 px-3 py-2 text-sm font-medium bg-white dark:bg-surface-highlight text-gray-600 dark:text-gray-300 transition-colors border-l border-gray-300 dark:border-border-dark">
+                                Wet
+                            </button>
+                            <button type="button" data-value="liquid" class="moisture-btn flex-1 px-3 py-2 text-sm font-medium bg-white dark:bg-surface-highlight text-gray-600 dark:text-gray-300 transition-colors border-l border-gray-300 dark:border-border-dark">
+                                Liquid
+                            </button>
+                        </div>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Shelf Life (hours)</label>
@@ -205,10 +211,41 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
     });
 });
 
+// Moisture type button handler
+document.querySelectorAll('.moisture-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.getElementById('moisture-type-input').value = btn.dataset.value;
+
+        document.querySelectorAll('.moisture-btn').forEach(b => {
+            if (b === btn) {
+                b.classList.remove('bg-white', 'dark:bg-surface-highlight', 'text-gray-600', 'dark:text-gray-300');
+                b.classList.add('bg-primary', 'text-white');
+            } else {
+                b.classList.remove('bg-primary', 'text-white');
+                b.classList.add('bg-white', 'dark:bg-surface-highlight', 'text-gray-600', 'dark:text-gray-300');
+            }
+        });
+    });
+});
+
+function resetMoistureButtons(value = 'dry') {
+    document.getElementById('moisture-type-input').value = value;
+    document.querySelectorAll('.moisture-btn').forEach(btn => {
+        if (btn.dataset.value === value) {
+            btn.classList.remove('bg-white', 'dark:bg-surface-highlight', 'text-gray-600', 'dark:text-gray-300');
+            btn.classList.add('bg-primary', 'text-white');
+        } else {
+            btn.classList.remove('bg-primary', 'text-white');
+            btn.classList.add('bg-white', 'dark:bg-surface-highlight', 'text-gray-600', 'dark:text-gray-300');
+        }
+    });
+}
+
 function openCreateModal() {
     document.getElementById('modal-title').textContent = 'Add Ingredient';
     document.getElementById('ingredient-form').setAttribute('hx-post', '/api/v1/ingredients');
     document.getElementById('ingredient-form').reset();
+    resetMoistureButtons('dry');
     document.getElementById('ingredient-modal').classList.remove('hidden');
     htmx.process(document.getElementById('ingredient-form'));
 }

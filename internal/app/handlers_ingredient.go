@@ -2,6 +2,7 @@ package app
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/ak/kws/internal/domain/models"
 	"github.com/gin-gonic/gin"
@@ -11,13 +12,14 @@ import (
 // ==================== Ingredient handlers ====================
 
 type CreateIngredientRequest struct {
-	TenantID         string                `json:"tenant_id" binding:"required"`
-	Name             string                `json:"name" binding:"required"`
-	MoistureType     string                `json:"moisture_type" binding:"required,oneof=dry wet liquid"`
-	ShelfLifeMinutes int                   `json:"shelf_life_minutes"`
-	AllergenInfo     []string              `json:"allergen_info"`
+	TenantID         string                `json:"tenant_id" form:"tenant_id" binding:"required"`
+	Name             string                `json:"name" form:"name" binding:"required"`
+	MoistureType     string                `json:"moisture_type" form:"moisture_type" binding:"required,oneof=dry wet liquid"`
+	ShelfLifeHours   int                   `json:"shelf_life_hours" form:"shelf_life_hours"`
+	AllergenInfo     string                `json:"allergen_info" form:"allergen_info"`
 	Nutrition        *models.NutritionInfo `json:"nutrition"`
 	Parameters       map[string]any        `json:"parameters"`
+	IsActive         string                `json:"is_active" form:"is_active"`
 }
 
 func (a *Application) listIngredients(c *gin.Context) {
@@ -47,7 +49,7 @@ func (a *Application) listIngredients(c *gin.Context) {
 
 func (a *Application) createIngredient(c *gin.Context) {
 	var req CreateIngredientRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBind(&req); err != nil {
 		errorResponse(c, http.StatusBadRequest, "INVALID_INPUT", err.Error())
 		return
 	}
@@ -58,15 +60,31 @@ func (a *Application) createIngredient(c *gin.Context) {
 		return
 	}
 
+	// Parse allergen info from comma-separated string
+	var allergens []string
+	if req.AllergenInfo != "" {
+		for _, a := range strings.Split(req.AllergenInfo, ",") {
+			if trimmed := strings.TrimSpace(a); trimmed != "" {
+				allergens = append(allergens, trimmed)
+			}
+		}
+	}
+
+	// Convert hours to minutes for storage
+	shelfLifeMinutes := req.ShelfLifeHours * 60
+
+	// Checkbox sends "on" when checked, empty when unchecked
+	isActive := req.IsActive == "on" || req.IsActive == "true" || req.IsActive == "1"
+
 	ingredient := &models.Ingredient{
 		TenantID:         tenantID,
 		Name:             req.Name,
 		MoistureType:     models.MoistureType(req.MoistureType),
-		ShelfLifeMinutes: req.ShelfLifeMinutes,
-		AllergenInfo:     req.AllergenInfo,
+		ShelfLifeMinutes: shelfLifeMinutes,
+		AllergenInfo:     allergens,
 		Nutrition:        req.Nutrition,
 		Parameters:       req.Parameters,
-		IsActive:         true,
+		IsActive:         isActive,
 	}
 
 	if err := a.repos.Ingredient.Create(c.Request.Context(), ingredient); err != nil {
@@ -113,15 +131,29 @@ func (a *Application) updateIngredient(c *gin.Context) {
 	}
 
 	var req CreateIngredientRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBind(&req); err != nil {
 		errorResponse(c, http.StatusBadRequest, "INVALID_INPUT", err.Error())
 		return
 	}
 
+	// Parse allergen info from comma-separated string
+	var allergens []string
+	if req.AllergenInfo != "" {
+		for _, a := range strings.Split(req.AllergenInfo, ",") {
+			if trimmed := strings.TrimSpace(a); trimmed != "" {
+				allergens = append(allergens, trimmed)
+			}
+		}
+	}
+
+	// Checkbox sends "on" when checked, empty when unchecked
+	isActive := req.IsActive == "on" || req.IsActive == "true" || req.IsActive == "1"
+
 	ingredient.Name = req.Name
 	ingredient.MoistureType = models.MoistureType(req.MoistureType)
-	ingredient.ShelfLifeMinutes = req.ShelfLifeMinutes
-	ingredient.AllergenInfo = req.AllergenInfo
+	ingredient.ShelfLifeMinutes = req.ShelfLifeHours * 60
+	ingredient.AllergenInfo = allergens
+	ingredient.IsActive = isActive
 	if req.Nutrition != nil {
 		ingredient.Nutrition = req.Nutrition
 	}
