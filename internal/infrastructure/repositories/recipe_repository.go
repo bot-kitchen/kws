@@ -111,9 +111,17 @@ func (r *recipeRepository) ListByTenant(ctx context.Context, tenantID primitive.
 }
 
 func (r *recipeRepository) GetPublishedForSite(ctx context.Context, siteID primitive.ObjectID) ([]*models.Recipe, error) {
+	// Return published recipes that are either:
+	// 1. Published globally (published_to_sites is empty/null)
+	// 2. Published specifically to this site
 	query := bson.M{
-		"status":             models.RecipeStatusPublished,
-		"published_to_sites": siteID,
+		"status": models.RecipeStatusPublished,
+		"$or": []bson.M{
+			{"published_to_sites": siteID},                  // site-specific
+			{"published_to_sites": bson.M{"$size": 0}},      // global (empty array)
+			{"published_to_sites": bson.M{"$exists": false}}, // global (null/missing)
+			{"published_to_sites": nil},                     // global (explicit null)
+		},
 	}
 
 	opts := options.Find().SetSort(bson.D{{Key: "name", Value: 1}})
