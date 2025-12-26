@@ -1,0 +1,348 @@
+= KOS Provisioning Guide
+:toc: left
+:toclevels: 3
+:sectnums:
+:source-highlighter: highlightjs
+
+== Overview
+
+This document describes the provisioning system that connects KOS (Kitchen Operating System) instances to KWS (Kitchen Web Service). The provisioning process establishes a secure mTLS connection between KOS and KWS, enabling recipe synchronization, order routing, and operational monitoring.
+
+== Architecture
+
+=== Provisioning Flow
+
+[source]
+----
+                                    KWS (Cloud)
+                                         │
+                            ┌────────────┴────────────┐
+                            │                         │
+                     Create KOS Instance        Generate Certificate
+                            │                         │
+                            └────────────┬────────────┘
+                                         │
+                                  Show QR Code
+                                         │
+                                         ▼
+                              ┌──────────────────┐
+                              │   QR Code with   │
+                              │   Bundle URL     │
+                              └────────┬─────────┘
+                                       │
+            ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
+                                       │
+                                       ▼
+                              ┌──────────────────┐
+                              │  KOS Web UI      │
+                              │  Scans QR Code   │
+                              └────────┬─────────┘
+                                       │
+                                Fetch Bundle from URL
+                                       │
+                                       ▼
+                              ┌──────────────────┐
+                              │  Store Config    │
+                              │  in Database     │
+                              └────────┬─────────┘
+                                       │
+                                 Initialize mTLS Client
+                                       │
+                                       ▼
+                              ┌──────────────────┐
+                              │  Register with   │
+                              │  KWS             │
+                              └──────────────────┘
+----
+
+=== Status Progression
+
+KOS instances progress through the following statuses:
+
+[cols="1,3"]
+|===
+| Status | Description
+
+| `pending`
+| KOS instance created in KWS, awaiting provisioning
+
+| `provisioned`
+| Certificate generated, bundle ready for download/scan
+
+| `registered`
+| KOS has registered with KWS via POST /api/v1/kos/register
+
+| `online`
+| KOS is actively sending heartbeats
+
+| `offline`
+| No recent heartbeat received (configurable threshold)
+
+| `deactivated`
+| Admin has deactivated the instance
+|===
+
+== Provisioning Bundle
+
+=== Bundle Structure
+
+The provisioning bundle contains all data needed to configure a KOS instance:
+
+[source,json]
+----
+{
+  "kos_id": "507f1f77bcf86cd799439011",
+  "tenant_id": "507f1f77bcf86cd799439012",
+  "site_id": "507f1f77bcf86cd799439013",
+  "kws_endpoint": "https://kws.example.com",
+  "certificate": "-----BEGIN CERTIFICATE-----\n...",
+  "private_key": "-----BEGIN RSA PRIVATE KEY-----\n...",
+  "ca_certificate": "-----BEGIN CERTIFICATE-----\n...",
+  "jwt_secret": "secret-for-token-generation",
+  "recipe_poll_secs": 300,
+  "order_poll_secs": 30
+}
+----
+
+=== Field Descriptions
+
+[cols="2,1,4"]
+|===
+| Field | Type | Description
+
+| `kos_id`
+| string
+| MongoDB ObjectID of the KOS instance (used as X-KOS-ID header)
+
+| `tenant_id`
+| string
+| Tenant identifier for multi-tenancy
+
+| `site_id`
+| string
+| Site where this KOS is deployed
+
+| `kws_endpoint`
+| string
+| Base URL of the KWS API
+
+| `certificate`
+| string
+| PEM-encoded X.509 client certificate for mTLS
+
+| `private_key`
+| string
+| PEM-encoded RSA private key for mTLS
+
+| `ca_certificate`
+| string
+| PEM-encoded CA certificate for verifying KWS server
+
+| `jwt_secret`
+| string
+| Secret for JWT token generation (optional)
+
+| `recipe_poll_secs`
+| int
+| Interval for polling recipes (default: 300 = 5 minutes)
+
+| `order_poll_secs`
+| int
+| Interval for polling orders (default: 30 seconds)
+|===
+
+== API Endpoints
+
+=== Get Provisioning Bundle
+
+Download the provisioning bundle as a JSON file.
+
+----
+GET /api/v1/kos-instances/{id}/provisioning-bundle
+----
+
+**Response:**
+- Content-Type: `application/json`
+- Content-Disposition: `attachment; filename=kos-provisioning-{id}.json`
+
+**Side Effects:**
+- If no certificate exists, one is generated
+- Instance status changes from `pending` to `provisioned`
+
+=== Get Provisioning QR Code
+
+Get a QR code image containing the bundle URL.
+
+----
+GET /api/v1/kos-instances/{id}/provisioning-qrcode
+----
+
+**Response:**
+- Content-Type: `image/png`
+- Size: 256x256 pixels
+- Error correction: Medium
+
+**QR Code Content:**
+The QR code encodes a URL to the provisioning bundle endpoint:
+----
+{kws_endpoint}/api/v1/kos-instances/{id}/provisioning-bundle
+----
+
+This is a "dynamic URL" approach where:
+- The QR code itself is stable (can be printed on labels)
+- The bundle content can change without regenerating the QR
+- Certificates can be regenerated while keeping the same QR
+
+=== Regenerate Certificate
+
+Generate a new certificate for an existing KOS instance.
+
+----
+POST /api/v1/kos-instances/{id}/regenerate-certificate
+----
+
+**Response:**
+[source,json]
+----
+{
+  "success": true,
+  "data": {
+    "certificate_serial": "123456789...",
+    "expires_at": "2026-12-26T00:00:00Z"
+  }
+}
+----
+
+**Use Cases:**
+- Certificate is expiring
+- Certificate may have been compromised
+- Rotating credentials as security policy
+
+== Certificate Management
+
+=== Certificate Generation
+
+Certificates are generated using RSA 2048-bit keys:
+
+[source,go]
+----
+template := x509.Certificate{
+    SerialNumber: serialNumber,
+    Subject: pkix.Name{
+        CommonName:   instance.ID.Hex(),  // KOS ID as CN
+        Organization: []string{"KWS"},
+    },
+    NotBefore:   time.Now(),
+    NotAfter:    time.Now().AddDate(1, 0, 0),  // 1 year
+    KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+    ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+}
+----
+
+=== Certificate Properties
+
+[cols="1,2"]
+|===
+| Property | Value
+
+| Algorithm
+| RSA 2048-bit
+
+| Validity
+| 1 year from generation
+
+| Common Name
+| KOS instance ObjectID (hex)
+
+| Organization
+| "KWS"
+
+| Key Usage
+| Digital Signature, Key Encipherment
+
+| Extended Key Usage
+| Client Authentication (for mTLS)
+|===
+
+=== Certificate Storage
+
+Certificates are stored in the `kos_instances` MongoDB collection:
+
+[source,json]
+----
+{
+  "_id": ObjectId("..."),
+  "certificate_pem": "-----BEGIN CERTIFICATE-----...",
+  "private_key_pem": "-----BEGIN RSA PRIVATE KEY-----...",
+  "certificate_serial": "123456789...",
+  "certificate_expiry": ISODate("2026-12-26T00:00:00Z")
+}
+----
+
+**Security Note:** Private keys are stored encrypted at rest in MongoDB but transmitted in the provisioning bundle for KOS to use.
+
+== Security Considerations
+
+=== mTLS Authentication
+
+KOS instances authenticate to KWS using mutual TLS:
+
+1. **TLS Handshake:** KOS presents its client certificate
+2. **Certificate Validation:** KWS verifies the certificate chain
+3. **Identity Extraction:** KWS extracts the KOS ID from the certificate CN
+4. **Request Header:** KOS also sends `X-KOS-ID` header for application-layer verification
+
+=== Bundle Security
+
+- Bundles contain sensitive credentials (private key, JWT secret)
+- Should be transmitted over HTTPS only
+- QR codes should not be photographed or shared publicly
+- Consider one-time token authentication for bundle download (future enhancement)
+
+=== Re-provisioning
+
+KOS allows re-provisioning with confirmation:
+- User must acknowledge that existing configuration will be replaced
+- Previous certificates become invalid after regeneration
+- KOS may temporarily disconnect during re-provisioning
+
+== User Experience
+
+=== For KWS Administrators
+
+1. Create KOS instance in KWS web UI (Sites → Add KOS)
+2. Navigate to KOS instance detail page
+3. Click "Show QR Code" button
+4. Display QR code on screen (or print/share with technician)
+
+=== For On-Site Technicians
+
+1. Open KOS web UI on tablet/laptop with camera
+2. Navigate to Settings → Provisioning
+3. Click "Scan QR Code" button
+4. Point camera at the QR code
+5. Review configuration preview
+6. Click "Apply Configuration"
+7. Wait for confirmation of successful connection
+
+== Troubleshooting
+
+=== QR Code Not Scanning
+
+- Ensure adequate lighting
+- Hold camera steady 6-12 inches from QR code
+- Clean camera lens
+- Try the "Upload JSON File" fallback option
+
+=== Connection Failed After Provisioning
+
+- Verify KOS has internet connectivity to KWS endpoint
+- Check firewall rules allow outbound HTTPS
+- Verify the KWS endpoint URL is correct
+- Check certificate hasn't expired
+
+=== Certificate Errors
+
+- Regenerate certificate in KWS
+- Re-scan QR code or re-upload bundle
+- Ensure system clock is synchronized (NTP)

@@ -129,18 +129,28 @@
         </div>
 
         {{if eq .KOS.Status "pending"}}
-        <!-- Pending State - Show Download Bundle Button -->
+        <!-- Pending State - Show Provisioning Options -->
         <div class="text-center py-8 bg-gray-50 dark:bg-surface-highlight rounded-lg">
-            <span class="material-symbols-outlined text-5xl text-primary mb-4 block">cloud_download</span>
+            <span class="material-symbols-outlined text-5xl text-primary mb-4 block">qr_code_2</span>
             <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Ready for Provisioning</h3>
             <p class="text-gray-500 dark:text-text-secondary mb-6 max-w-md mx-auto">
-                Download the provisioning bundle to configure the KOS instance. This will generate a certificate and provide all necessary configuration files.
+                Show the QR code to the on-site technician who will scan it using the KOS web interface (Settings → Provisioning).
             </p>
-            <a href="/api/v1/kos-instances/{{.KOS.ID}}/provisioning-bundle"
-               class="inline-flex items-center gap-2 rounded-lg bg-primary hover:bg-primary/90 text-white px-6 py-3 text-sm font-bold transition-all shadow-[0_0_15px_rgba(110,86,207,0.3)]">
-                <span class="material-symbols-outlined text-lg">download</span>
-                <span>Download Provisioning Bundle</span>
-            </a>
+            <div class="flex flex-col sm:flex-row gap-3 justify-center">
+                <button type="button" onclick="openQRCodeModal()"
+                        class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary hover:bg-primary/90 text-white px-6 py-3 text-sm font-bold transition-all shadow-[0_0_15px_rgba(110,86,207,0.3)]">
+                    <span class="material-symbols-outlined text-lg">qr_code_2</span>
+                    <span>Show QR Code</span>
+                </button>
+                <a href="/api/v1/kos-instances/{{.KOS.ID}}/provisioning-bundle"
+                   class="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-100 dark:bg-surface-highlight hover:bg-gray-200 dark:hover:bg-border-dark text-gray-700 dark:text-white px-6 py-3 text-sm font-medium transition-colors">
+                    <span class="material-symbols-outlined text-lg">download</span>
+                    <span>Download JSON File</span>
+                </a>
+            </div>
+            <p class="text-xs text-gray-400 dark:text-text-secondary mt-4">
+                The technician can scan the QR code or upload the JSON file in the KOS Settings page.
+            </p>
         </div>
 
         {{else if .KOS.HasCertificate}}
@@ -170,16 +180,21 @@
         </div>
 
         <div class="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-200 dark:border-border-dark">
-            <button type="button" onclick="openRegenerateCertModal()"
-                    class="flex items-center justify-center gap-2 rounded-lg bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 text-sm font-bold transition-all">
-                <span class="material-symbols-outlined text-lg">autorenew</span>
-                <span>Regenerate Certificate</span>
+            <button type="button" onclick="openQRCodeModal()"
+                    class="flex items-center justify-center gap-2 rounded-lg bg-primary hover:bg-primary/90 text-white px-4 py-2 text-sm font-bold transition-all">
+                <span class="material-symbols-outlined text-lg">qr_code_2</span>
+                <span>Show QR Code</span>
             </button>
             <a href="/api/v1/kos-instances/{{.KOS.ID}}/provisioning-bundle"
                class="flex items-center justify-center gap-2 rounded-lg bg-gray-100 dark:bg-surface-highlight hover:bg-gray-200 dark:hover:bg-border-dark text-gray-700 dark:text-white px-4 py-2 text-sm font-medium transition-colors">
                 <span class="material-symbols-outlined text-lg">download</span>
                 <span>Download Bundle</span>
             </a>
+            <button type="button" onclick="openRegenerateCertModal()"
+                    class="flex items-center justify-center gap-2 rounded-lg bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 text-sm font-bold transition-all">
+                <span class="material-symbols-outlined text-lg">autorenew</span>
+                <span>Regenerate Certificate</span>
+            </button>
         </div>
 
         {{else}}
@@ -288,6 +303,57 @@
     </div>
 </div>
 
+<!-- QR Code Modal -->
+<div id="qrcode-modal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeQRCodeModal()"></div>
+        <div class="relative bg-white dark:bg-surface-dark rounded-xl shadow-xl max-w-md w-full p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-semibold text-gray-900 dark:text-white">Provisioning QR Code</h3>
+                <button type="button" onclick="closeQRCodeModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+
+            <div class="text-center">
+                <div class="bg-white p-4 rounded-lg inline-block mb-4">
+                    <img id="qrcode-image" src="/api/v1/kos-instances/{{.KOS.ID}}/provisioning-qrcode"
+                         alt="Provisioning QR Code" class="w-64 h-64 mx-auto">
+                </div>
+
+                <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
+                    <h4 class="font-medium text-blue-800 dark:text-blue-300 mb-2 flex items-center justify-center gap-2">
+                        <span class="material-symbols-outlined text-lg">info</span>
+                        How to use this QR code
+                    </h4>
+                    <ol class="text-sm text-blue-700 dark:text-blue-400 text-left space-y-1">
+                        <li>1. Open the KOS web interface on a tablet or laptop</li>
+                        <li>2. Navigate to <strong>Settings → Provisioning</strong></li>
+                        <li>3. Click <strong>"Scan QR Code"</strong></li>
+                        <li>4. Point the camera at this QR code</li>
+                        <li>5. Confirm the configuration to complete provisioning</li>
+                    </ol>
+                </div>
+
+                <p class="text-xs text-gray-500 dark:text-text-secondary">
+                    Instance: <strong>{{.KOS.Name}}</strong>
+                </p>
+            </div>
+
+            <div class="flex gap-3 justify-end mt-4 pt-4 border-t border-gray-200 dark:border-border-dark">
+                <a href="/api/v1/kos-instances/{{.KOS.ID}}/provisioning-bundle"
+                   class="px-4 py-2 rounded-lg bg-gray-100 dark:bg-surface-highlight hover:bg-gray-200 dark:hover:bg-border-dark text-gray-700 dark:text-white text-sm font-medium transition-colors">
+                    Download JSON Instead
+                </a>
+                <button type="button" onclick="closeQRCodeModal()"
+                        class="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-bold transition-colors">
+                    Done
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Delete Confirmation Modal -->
 <div id="delete-modal" class="hidden fixed inset-0 z-50 overflow-y-auto">
     <div class="flex items-center justify-center min-h-screen px-4">
@@ -320,6 +386,17 @@
 </div>
 
 <script>
+function openQRCodeModal() {
+    // Refresh the QR code image to avoid caching issues
+    const img = document.getElementById('qrcode-image');
+    img.src = '/api/v1/kos-instances/{{.KOS.ID}}/provisioning-qrcode?' + new Date().getTime();
+    document.getElementById('qrcode-modal').classList.remove('hidden');
+}
+
+function closeQRCodeModal() {
+    document.getElementById('qrcode-modal').classList.add('hidden');
+}
+
 function openDeactivateModal() {
     document.getElementById('deactivate-modal').classList.remove('hidden');
 }
@@ -428,6 +505,7 @@ function deleteKOS() {
 // Close modals on escape key
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
+        closeQRCodeModal();
         closeDeactivateModal();
         closeRegenerateCertModal();
         closeDeleteModal();

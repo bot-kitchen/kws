@@ -171,6 +171,7 @@ func (a *Application) setupRoutes() {
 			kos.GET("/:id", a.getKOSInstance)
 			kos.PUT("/:id", a.updateKOSInstance)
 			kos.GET("/:id/provisioning-bundle", a.getKOSProvisioningBundle)
+			kos.GET("/:id/provisioning-qrcode", a.getKOSProvisioningQRCode)
 			kos.POST("/:id/regenerate-certificate", a.regenerateKOSCertificate)
 			kos.DELETE("/:id", a.deleteKOSInstance)
 			kos.POST("/:id/deactivate", a.deactivateKOSInstance)

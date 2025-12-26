@@ -14,6 +14,7 @@ import (
 
 	"github.com/ak/kws/internal/domain/models"
 	"github.com/gin-gonic/gin"
+	qrcode "github.com/skip2/go-qrcode"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -315,6 +316,59 @@ func (a *Application) getKOSProvisioningBundle(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	c.Header("Content-Type", "application/json")
 	c.Data(http.StatusOK, "application/json", bundleJSON)
+}
+
+func (a *Application) getKOSProvisioningQRCode(c *gin.Context) {
+	id, ok := getObjectID(c, "id")
+	if !ok {
+		return
+	}
+
+	instance, err := a.repos.KOSInstance.GetByID(c.Request.Context(), id)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to get KOS instance")
+		return
+	}
+	if instance == nil {
+		errorResponse(c, http.StatusNotFound, "NOT_FOUND", "KOS instance not found")
+		return
+	}
+
+	// Generate certificate if not already generated (same as provisioning bundle)
+	if instance.CertificatePEM == "" {
+		cert, key, serial, err := a.generateKOSCertificate(instance)
+		if err != nil {
+			errorResponse(c, http.StatusInternalServerError, "CERT_ERROR", "Failed to generate certificate")
+			return
+		}
+		instance.CertificatePEM = cert
+		instance.PrivateKeyPEM = key
+		instance.CertificateSerial = serial
+		instance.CertificateExpiry = time.Now().AddDate(1, 0, 0) // 1 year
+		instance.Status = models.KOSStatusProvisioned
+
+		if err := a.repos.KOSInstance.Update(c.Request.Context(), instance); err != nil {
+			errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to save certificate")
+			return
+		}
+	}
+
+	// Generate URL that points to the provisioning bundle
+	// The URL is dynamic - bundle content can change without regenerating QR
+	bundleURL := fmt.Sprintf("%s/api/v1/kos-instances/%s/provisioning-bundle",
+		a.config.Server.ExternalURL, instance.ID.Hex())
+
+	// Generate QR code as PNG
+	// Size 256x256 is good balance between scannability and file size
+	qr, err := qrcode.Encode(bundleURL, qrcode.Medium, 256)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "QR_ERROR", "Failed to generate QR code")
+		return
+	}
+
+	c.Header("Content-Type", "image/png")
+	c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+	c.Data(http.StatusOK, "image/png", qr)
 }
 
 func (a *Application) regenerateKOSCertificate(c *gin.Context) {
