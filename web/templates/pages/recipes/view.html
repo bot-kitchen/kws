@@ -130,12 +130,12 @@
     // Recipe steps data from server (using json template function)
     const recipeStepsRaw = {{.Recipe.RecipeSteps | json}};
 
-    // Parse JSON string fields (Parameters and DependsOnSteps are stored as JSON strings in DB)
+    // Normalize field names (Go template uses PascalCase, JS uses snake_case)
     const recipeSteps = recipeStepsRaw.map(step => ({
-        step_number: step.step_number,
-        action: step.action,
-        parameters: typeof step.parameters === 'string' ? JSON.parse(step.parameters || '{}') : (step.parameters || {}),
-        depends_on_steps: typeof step.depends_on_steps === 'string' ? JSON.parse(step.depends_on_steps || '[]') : (step.depends_on_steps || [])
+        step_number: step.StepNumber || step.step_number,
+        action: step.Action || step.action,
+        parameters: step.Parameters || step.parameters || {},
+        depends_on_steps: step.DependsOnSteps || step.depends_on_steps || []
     }));
 
     // Action styling for DAG view

@@ -33,7 +33,8 @@
       "Bash(bun install)",
       "Bash(timeout 8 make run:*)",
       "Bash(make css:*)",
-      "Bash(timeout 5 make:*)"
+      "Bash(timeout 5 make:*)",
+      "Bash(make clean:*)"
     ],
     "deny": [],
     "ask": [],

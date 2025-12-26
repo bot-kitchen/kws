@@ -15,14 +15,16 @@ import (
 type CreateRecipeRequest struct {
 	TenantID string `json:"tenant_id"` // Optional in request, validated against session
 	Name     string `json:"name" binding:"required"`
-	Description string                    `json:"description"`
-	Category    string                    `json:"category"`
-	PrepTime    int                       `json:"prep_time"`
-	CookTime    int                       `json:"cook_time"`
-	Servings    int                       `json:"servings"`
-	Steps       []RecipeStepRequest       `json:"steps"`
-	Ingredients []RecipeIngredientRequest `json:"ingredients"`
-	Parameters  map[string]any            `json:"parameters"`
+	Description             string                    `json:"description"`
+	Category                string                    `json:"category"`
+	PrepTime                int                       `json:"prep_time"`
+	CookTime                int                       `json:"cook_time"`
+	EstimatedPrepTimeSec    int                       `json:"estimated_prep_time_sec"`    // KOS-compatible field (seconds)
+	EstimatedCookingTimeSec int                       `json:"estimated_cooking_time_sec"` // KOS-compatible field (seconds)
+	Servings                int                       `json:"servings"`
+	Steps                   []RecipeStepRequest       `json:"steps"`
+	Ingredients             []RecipeIngredientRequest `json:"ingredients"`
+	Parameters              map[string]any            `json:"parameters"`
 }
 
 // RecipeStepRequest represents a recipe step in API requests
@@ -47,15 +49,17 @@ type RecipeIngredientRequest struct {
 }
 
 type UpdateRecipeRequest struct {
-	Name        string                    `json:"name"`
-	Description string                    `json:"description"`
-	Category    string                    `json:"category"`
-	PrepTime    int                       `json:"prep_time"`
-	CookTime    int                       `json:"cook_time"`
-	Servings    int                       `json:"servings"`
-	Steps       []RecipeStepRequest       `json:"steps"`
-	Ingredients []RecipeIngredientRequest `json:"ingredients"`
-	Parameters  map[string]any            `json:"parameters"`
+	Name                    string                    `json:"name"`
+	Description             string                    `json:"description"`
+	Category                string                    `json:"category"`
+	PrepTime                int                       `json:"prep_time"`
+	CookTime                int                       `json:"cook_time"`
+	EstimatedPrepTimeSec    int                       `json:"estimated_prep_time_sec"`
+	EstimatedCookingTimeSec int                       `json:"estimated_cooking_time_sec"`
+	Servings                int                       `json:"servings"`
+	Steps                   []RecipeStepRequest       `json:"steps"`
+	Ingredients             []RecipeIngredientRequest `json:"ingredients"`
+	Parameters              map[string]any            `json:"parameters"`
 }
 
 type PublishRecipeRequest struct {
@@ -96,21 +100,22 @@ func (a *Application) createRecipe(c *gin.Context) {
 
 	// Get tenant_id from session context to validate against request
 	sessionTenantID := middleware.GetEffectiveTenantID(c)
-	if sessionTenantID == "" {
-		errorResponse(c, http.StatusUnauthorized, "NO_TENANT", "No tenant context - please select a tenant")
+	if sessionTenantID == "" || sessionTenantID == "platform" {
+		// Platform admins must select a tenant before creating recipes
+		errorResponse(c, http.StatusUnauthorized, "NO_TENANT", "No tenant context - please select a tenant first")
 		return
 	}
 
-	// Use session tenant_id, but if request provides one, validate it matches
-	tenantIDStr := sessionTenantID
+	// Validate session tenant_id is a valid ObjectID
+	tenantID, err := primitive.ObjectIDFromHex(sessionTenantID)
+	if err != nil {
+		errorResponse(c, http.StatusUnauthorized, "INVALID_TENANT", "Invalid tenant context - please select a valid tenant")
+		return
+	}
+
+	// If request provides tenant_id, validate it matches session
 	if req.TenantID != "" && req.TenantID != sessionTenantID {
 		errorResponse(c, http.StatusForbidden, "TENANT_MISMATCH", "Request tenant_id does not match session context")
-		return
-	}
-
-	tenantID, err := primitive.ObjectIDFromHex(tenantIDStr)
-	if err != nil {
-		errorResponse(c, http.StatusBadRequest, "INVALID_ID", "Invalid tenant_id format")
 		return
 	}
 
@@ -146,18 +151,20 @@ func (a *Application) createRecipe(c *gin.Context) {
 	}
 
 	recipe := &models.Recipe{
-		TenantID:    tenantID,
-		Name:        req.Name,
-		Description: req.Description,
-		Category:    req.Category,
-		PrepTime:    req.PrepTime,
-		CookTime:    req.CookTime,
-		Servings:    req.Servings,
-		Steps:       steps,
-		Ingredients: ingredients,
-		Parameters:  req.Parameters,
-		Status:      models.RecipeStatusDraft,
-		Version:     1,
+		TenantID:                tenantID,
+		Name:                    req.Name,
+		Description:             req.Description,
+		Category:                req.Category,
+		PrepTime:                req.PrepTime,
+		CookTime:                req.CookTime,
+		EstimatedPrepTimeSec:    req.EstimatedPrepTimeSec,
+		EstimatedCookingTimeSec: req.EstimatedCookingTimeSec,
+		Servings:                req.Servings,
+		Steps:                   steps,
+		Ingredients:             ingredients,
+		Parameters:              req.Parameters,
+		Status:                  models.RecipeStatusDraft,
+		Version:                 1,
 	}
 
 	if err := a.repos.Recipe.Create(c.Request.Context(), recipe); err != nil {
@@ -224,6 +231,12 @@ func (a *Application) updateRecipe(c *gin.Context) {
 	}
 	if req.CookTime > 0 {
 		recipe.CookTime = req.CookTime
+	}
+	if req.EstimatedPrepTimeSec > 0 {
+		recipe.EstimatedPrepTimeSec = req.EstimatedPrepTimeSec
+	}
+	if req.EstimatedCookingTimeSec > 0 {
+		recipe.EstimatedCookingTimeSec = req.EstimatedCookingTimeSec
 	}
 	if req.Servings > 0 {
 		recipe.Servings = req.Servings

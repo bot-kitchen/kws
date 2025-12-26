@@ -25,6 +25,7 @@ type Application struct {
 	router        *gin.Engine
 	handlers      *Handlers
 	webHandlers   *WebHandlers
+	sessionConfig middleware.SessionConfig
 }
 
 // New creates a new Application instance
@@ -71,6 +72,9 @@ func New(cfg *config.Config, log *logger.Logger, mongodb *database.MongoDB) (*Ap
 		DevMode:        cfg.IsDevelopment() && cfg.App.Debug,
 	}
 
+	// Store session config for API routes
+	app.sessionConfig = sessionConfig
+
 	// Create web handlers for UI
 	webHandlers, err := NewWebHandlers(app.handlers, sessionConfig)
 	if err != nil {
@@ -111,8 +115,9 @@ func (a *Application) setupRoutes() {
 	a.router.GET("/health", a.healthCheck)
 	a.router.GET("/ready", a.readinessCheck)
 
-	// API v1 routes
+	// API v1 routes - apply session middleware for tenant context
 	v1 := a.router.Group("/api/v1")
+	v1.Use(middleware.OptionalSession(a.sessionConfig)) // Read session if present, but don't require it
 	{
 		// Public info endpoint
 		v1.GET("/info", a.apiInfo)

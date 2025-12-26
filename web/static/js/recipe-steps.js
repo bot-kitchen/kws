@@ -1787,26 +1787,27 @@ async function handleFormSubmit(e) {
         return false;
     }
 
-    // Collect recipe basic info
-    const tenantIdField = document.getElementById('tenant_id');
+    // Convert steps to API format (KWS uses embedded documents)
+    const stepsData = steps.map((step, index) => ({
+        step_number: index + 1,
+        action: step.action || '',
+        parameters: step.parameters || {},
+        depends_on_steps: step.depends_on_steps || [],
+        name: step.name || '',
+        description: step.description || ''
+    }));
+
+    // Collect recipe data with embedded steps
     const recipeData = {
         name: document.getElementById('name').value,
         estimated_prep_time_sec: parseInt(document.getElementById('estimated_prep_time_sec').value) * 60,
         estimated_cooking_time_sec: parseInt(document.getElementById('estimated_cooking_time_sec').value) * 60,
-        tenant_id: tenantIdField ? tenantIdField.value : undefined
+        steps: stepsData
     };
 
     try {
-        // Create or update recipe
-        const recipeId = await saveRecipe(recipeData);
-
-        // Delete all existing steps for this recipe (replace all strategy)
-        await deleteAllStepsForRecipe(recipeId);
-
-        // Save each step via API
-        for (const step of steps) {
-            await saveRecipeStep(recipeId, step);
-        }
+        // Create or update recipe (steps are embedded in the request)
+        await saveRecipe(recipeData);
 
         // Redirect to recipes list
         window.location.href = '/recipes';
@@ -1843,54 +1844,6 @@ async function saveRecipe(data) {
     return result.data.id;
 }
 
-async function deleteAllStepsForRecipe(recipeId) {
-    // Fetch all existing steps for this recipe
-    const response = await fetch(`/api/v1/recipe-steps?recipe_id=${recipeId}`);
-    if (!response.ok) {
-        console.warn('Failed to fetch existing steps for deletion:', response.status);
-        return;
-    }
-
-    const existingSteps = await response.json();
-    if (!existingSteps || !existingSteps.data) {
-        return;
-    }
-
-    // Delete each step individually
-    for (const step of existingSteps.data) {
-        try {
-            const deleteResponse = await fetch(`/api/v1/recipe-steps/${step.id}`, {
-                method: 'DELETE'
-            });
-            if (!deleteResponse.ok) {
-                console.warn(`Failed to delete step ${step.id}:`, deleteResponse.status);
-            }
-        } catch (error) {
-            console.warn(`Error deleting step ${step.id}:`, error);
-        }
-    }
-}
-
-async function saveRecipeStep(recipeId, step) {
-    const stepData = {
-        recipe_id: recipeId,
-        step_number: step.step_number,
-        action: step.action,
-        parameters: JSON.stringify(step.parameters),
-        depends_on_steps: JSON.stringify(step.depends_on_steps)
-    };
-
-    const response = await fetch('/api/v1/recipe-steps', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(stepData)
-    });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Failed to save step ${step.step_number}:`, response.status, errorText);
-        throw new Error(`Failed to save step ${step.step_number}: ${response.statusText}`);
-    }
-
-    return await response.json();
-}
+// NOTE: KWS uses embedded documents for recipe steps.
+// Steps are saved as part of the recipe create/update request.
+// No separate recipe-steps API endpoint is needed.

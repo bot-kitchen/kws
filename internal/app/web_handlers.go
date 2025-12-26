@@ -932,6 +932,7 @@ func (w *WebHandlers) RecipeDetail(c *gin.Context) {
 			"IsActive":                recipe.Status == "published",
 			"EstimatedPrepTimeSec":    recipe.EstimatedPrepTimeSec,
 			"EstimatedCookingTimeSec": recipe.EstimatedCookingTimeSec,
+			"RecipeSteps":             stepData,
 		},
 		"Steps": stepData,
 	}
