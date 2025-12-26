@@ -63,7 +63,7 @@ type UpdateRecipeRequest struct {
 }
 
 type PublishRecipeRequest struct {
-	SiteIDs []string `json:"site_ids" binding:"required,min=1"`
+	SiteIDs []string `json:"site_ids"` // Optional - if empty, publishes globally
 }
 
 func (a *Application) listRecipes(c *gin.Context) {
@@ -339,39 +339,41 @@ func (a *Application) publishRecipe(c *gin.Context) {
 		return
 	}
 
+	// Parse optional request body for site_ids
 	var req PublishRecipeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		errorResponse(c, http.StatusBadRequest, "INVALID_INPUT", err.Error())
-		return
-	}
+	// Ignore binding errors - site_ids is optional
+	_ = c.ShouldBindJSON(&req)
 
-	// Convert site IDs
-	siteIDs := make([]primitive.ObjectID, len(req.SiteIDs))
-	for i, siteIDStr := range req.SiteIDs {
-		siteID, err := primitive.ObjectIDFromHex(siteIDStr)
-		if err != nil {
-			errorResponse(c, http.StatusBadRequest, "INVALID_ID", "Invalid site_id format")
-			return
+	// Convert site IDs if provided
+	if len(req.SiteIDs) > 0 {
+		siteIDs := make([]primitive.ObjectID, len(req.SiteIDs))
+		for i, siteIDStr := range req.SiteIDs {
+			siteID, err := primitive.ObjectIDFromHex(siteIDStr)
+			if err != nil {
+				errorResponse(c, http.StatusBadRequest, "INVALID_ID", "Invalid site_id format")
+				return
+			}
+			siteIDs[i] = siteID
 		}
-		siteIDs[i] = siteID
+
+		// Merge with existing published sites
+		existingSites := make(map[primitive.ObjectID]bool)
+		for _, s := range recipe.PublishedToSites {
+			existingSites[s] = true
+		}
+		for _, s := range siteIDs {
+			existingSites[s] = true
+		}
+
+		// Convert back to slice
+		allSites := make([]primitive.ObjectID, 0, len(existingSites))
+		for s := range existingSites {
+			allSites = append(allSites, s)
+		}
+		recipe.PublishedToSites = allSites
 	}
 
-	// Merge with existing published sites
-	existingSites := make(map[primitive.ObjectID]bool)
-	for _, s := range recipe.PublishedToSites {
-		existingSites[s] = true
-	}
-	for _, s := range siteIDs {
-		existingSites[s] = true
-	}
-
-	// Convert back to slice
-	allSites := make([]primitive.ObjectID, 0, len(existingSites))
-	for s := range existingSites {
-		allSites = append(allSites, s)
-	}
-
-	recipe.PublishedToSites = allSites
+	// Set status to published
 	recipe.Status = models.RecipeStatusPublished
 	now := time.Now()
 	recipe.PublishedAt = &now

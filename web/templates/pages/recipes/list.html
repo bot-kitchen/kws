@@ -104,13 +104,13 @@
             <!-- Actions -->
             <div class="flex flex-col gap-1.5 pt-2 border-t border-gray-100 dark:border-border-dark">
                 {{if eq .Status "draft"}}
-                <button onclick="publishRecipe('{{.ID}}')"
+                <button onclick="publishRecipe('{{.ID}}')" title="Publish to KOS"
                    class="w-full flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-bold transition-all">
                     <span class="material-symbols-outlined text-sm">publish</span>
                     <span>Publish</span>
                 </button>
-                {{else}}
-                <button onclick="unpublishRecipe('{{.ID}}')"
+                {{else if eq .Status "published"}}
+                <button onclick="unpublishRecipe('{{.ID}}')" title="Remove from KOS"
                    class="w-full flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-gray-200 dark:bg-surface-highlight hover:bg-gray-300 dark:hover:bg-border-dark text-gray-700 dark:text-gray-300 text-xs font-medium transition-all">
                     <span class="material-symbols-outlined text-sm">unpublished</span>
                     <span>Unpublish</span>

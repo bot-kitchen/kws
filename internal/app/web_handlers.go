@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ak/kws/internal/app/middleware"
+	"github.com/ak/kws/internal/domain/models"
 	"github.com/ak/kws/internal/domain/repositories"
 	"github.com/ak/kws/web"
 	"github.com/gin-gonic/gin"
@@ -820,7 +821,8 @@ func (w *WebHandlers) Recipes(c *gin.Context) {
 	recipeData := []gin.H{}
 	var publishedCount, draftCount int
 
-	if tenantIDStr != "" {
+	// Only load recipes if we have a valid tenant ObjectID (not "platform")
+	if tenantIDStr != "" && tenantIDStr != "platform" {
 		tenantID, err := primitive.ObjectIDFromHex(tenantIDStr)
 		if err == nil {
 			status := c.Query("status")
@@ -828,9 +830,9 @@ func (w *WebHandlers) Recipes(c *gin.Context) {
 			for _, r := range recipes {
 				// Count by status
 				switch r.Status {
-				case "published":
+				case models.RecipeStatusPublished:
 					publishedCount++
-				case "draft":
+				case models.RecipeStatusDraft:
 					draftCount++
 				}
 
@@ -838,7 +840,7 @@ func (w *WebHandlers) Recipes(c *gin.Context) {
 					"ID":          r.ID.Hex(),
 					"Name":        r.Name,
 					"Category":    r.Category,
-					"Status":      r.Status,
+					"Status":      string(r.Status), // Convert to string for template comparison
 					"Version":     r.Version,
 					"Description": r.Description,
 					"PrepTime":    r.PrepTime,
