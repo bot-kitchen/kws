@@ -4,6 +4,10 @@
 
 /* Custom styles layer */
 @layer base {
+  /* Global font family */
+  html {
+    font-family: 'Nunito', system-ui, -apple-system, sans-serif;
+  }
 
   /* Hide number input spinners and prevent scroll-to-change */
   input[type="number"]::-webkit-inner-spin-button,
@@ -72,6 +76,15 @@
 
   .material-symbols-outlined {
     font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+
+  /* Filter button hover - only when not active */
+  .filter-btn:not(.filter-active):hover {
+    background-color: #f3f4f6; /* gray-100 */
+  }
+
+  .dark .filter-btn:not(.filter-active):hover {
+    background-color: #2A2D36; /* border-dark */
   }
 }
 

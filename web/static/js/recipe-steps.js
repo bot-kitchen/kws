@@ -265,8 +265,18 @@ function initializeRecipeStepsManagement() {
 // Initialize from existing steps (when editing)
 function initializeSteps(existingSteps) {
     try {
+        // Normalize field names (Go template uses PascalCase, JS uses snake_case)
+        const normalizedSteps = existingSteps.map(step => ({
+            step_number: step.StepNumber || step.step_number,
+            action: step.Action || step.action,
+            parameters: step.Parameters || step.parameters || {},
+            depends_on_steps: step.DependsOnSteps || step.depends_on_steps || [],
+            name: step.Name || step.name || '',
+            description: step.Description || step.description || ''
+        }));
+
         // Sort by step_number first
-        const sortedSteps = [...existingSteps].sort((a, b) => a.step_number - b.step_number);
+        const sortedSteps = [...normalizedSteps].sort((a, b) => a.step_number - b.step_number);
 
         // Detect ingredient groups (pick followed by add_solid followed by place)
         const processedIndices = new Set();

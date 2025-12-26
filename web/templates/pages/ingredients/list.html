@@ -52,16 +52,16 @@
         <div class="flex flex-wrap gap-3 items-center">
             <!-- Type Filter -->
             <div class="flex rounded-lg border border-gray-300 dark:border-border-dark overflow-hidden">
-                <button type="button" data-filter="" class="filter-btn px-3 py-1.5 text-sm font-medium bg-primary text-white transition-colors">
+                <button type="button" data-filter="" class="filter-btn filter-active px-3 py-1.5 text-sm font-medium bg-primary text-white transition-colors">
                     All
                 </button>
-                <button type="button" data-filter="dry" class="filter-btn px-3 py-1.5 text-sm font-medium bg-white dark:bg-surface-highlight text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors border-l border-gray-300 dark:border-border-dark">
+                <button type="button" data-filter="dry" class="filter-btn px-3 py-1.5 text-sm font-medium bg-white dark:bg-surface-highlight text-gray-600 dark:text-gray-300 transition-colors border-l border-gray-300 dark:border-border-dark">
                     Dry
                 </button>
-                <button type="button" data-filter="wet" class="filter-btn px-3 py-1.5 text-sm font-medium bg-white dark:bg-surface-highlight text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors border-l border-gray-300 dark:border-border-dark">
+                <button type="button" data-filter="wet" class="filter-btn px-3 py-1.5 text-sm font-medium bg-white dark:bg-surface-highlight text-gray-600 dark:text-gray-300 transition-colors border-l border-gray-300 dark:border-border-dark">
                     Wet
                 </button>
-                <button type="button" data-filter="liquid" class="filter-btn px-3 py-1.5 text-sm font-medium bg-white dark:bg-surface-highlight text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors border-l border-gray-300 dark:border-border-dark">
+                <button type="button" data-filter="liquid" class="filter-btn px-3 py-1.5 text-sm font-medium bg-white dark:bg-surface-highlight text-gray-600 dark:text-gray-300 transition-colors border-l border-gray-300 dark:border-border-dark">
                     Liquid
                 </button>
             </div>
@@ -201,9 +201,7 @@
         </div>
     </div>
 </div>
-{{end}}
 
-{{define "scripts"}}
 <script>
 let currentMoistureFilter = '';
 
@@ -228,9 +226,9 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
         document.querySelectorAll('.filter-btn').forEach(b => {
             if (b === btn) {
                 b.classList.remove('bg-white', 'dark:bg-surface-highlight', 'text-gray-600', 'dark:text-gray-300');
-                b.classList.add('bg-primary', 'text-white');
+                b.classList.add('bg-primary', 'text-white', 'filter-active');
             } else {
-                b.classList.remove('bg-primary', 'text-white');
+                b.classList.remove('bg-primary', 'text-white', 'filter-active');
                 b.classList.add('bg-white', 'dark:bg-surface-highlight', 'text-gray-600', 'dark:text-gray-300');
             }
         });

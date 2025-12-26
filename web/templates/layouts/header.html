@@ -70,7 +70,7 @@
         </div>
 
         <!-- Dark mode toggle -->
-        <button @click="darkMode = !darkMode"
+        <button @click="toggleDarkMode()"
                 class="p-2 rounded-lg text-gray-500 dark:text-text-secondary hover:bg-gray-100 dark:hover:bg-surface-highlight transition-colors">
             <span class="material-symbols-outlined" x-text="darkMode ? 'light_mode' : 'dark_mode'"></span>
         </button>

@@ -997,6 +997,7 @@ func (w *WebHandlers) RecipeEdit(c *gin.Context) {
 			"Status":                  recipe.Status,
 			"EstimatedPrepTimeSec":    recipe.EstimatedPrepTimeSec,
 			"EstimatedCookingTimeSec": recipe.EstimatedCookingTimeSec,
+			"RecipeSteps":             stepData,
 		},
 		"Steps":       stepData,
 		"Ingredients": ingredientData,
