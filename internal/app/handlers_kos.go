@@ -1,0 +1,576 @@
+package app
+
+import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
+	"net/http"
+	"time"
+
+	"github.com/ak/kws/internal/domain/models"
+	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
+
+// ==================== KOS Instance Management handlers ====================
+
+type CreateKOSInstanceRequest struct {
+	TenantID string `json:"tenant_id" binding:"required"`
+	SiteID   string `json:"site_id" binding:"required"`
+	Name     string `json:"name" binding:"required"`
+}
+
+type UpdateKOSInstanceRequest struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+func (a *Application) listKOSInstances(c *gin.Context) {
+	tenantIDStr := c.Query("tenant_id")
+	if tenantIDStr == "" {
+		errorResponse(c, http.StatusBadRequest, "MISSING_PARAM", "tenant_id is required")
+		return
+	}
+
+	tenantID, err := primitive.ObjectIDFromHex(tenantIDStr)
+	if err != nil {
+		errorResponse(c, http.StatusBadRequest, "INVALID_ID", "Invalid tenant_id format")
+		return
+	}
+
+	page, limit := getPagination(c)
+
+	instances, total, err := a.repos.KOSInstance.ListByTenant(c.Request.Context(), tenantID, page, limit)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to list KOS instances")
+		return
+	}
+
+	paginatedResponse(c, instances, page, limit, total)
+}
+
+func (a *Application) createKOSInstance(c *gin.Context) {
+	var req CreateKOSInstanceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, http.StatusBadRequest, "INVALID_INPUT", err.Error())
+		return
+	}
+
+	tenantID, err := primitive.ObjectIDFromHex(req.TenantID)
+	if err != nil {
+		errorResponse(c, http.StatusBadRequest, "INVALID_ID", "Invalid tenant_id format")
+		return
+	}
+
+	siteID, err := primitive.ObjectIDFromHex(req.SiteID)
+	if err != nil {
+		errorResponse(c, http.StatusBadRequest, "INVALID_ID", "Invalid site_id format")
+		return
+	}
+
+	// Check if site already has a KOS instance
+	existing, err := a.repos.KOSInstance.GetBySiteID(c.Request.Context(), siteID)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to check existing KOS instance")
+		return
+	}
+	if existing != nil {
+		errorResponse(c, http.StatusConflict, "SITE_HAS_KOS", "Site already has a KOS instance")
+		return
+	}
+
+	instance := &models.KOSInstance{
+		TenantID: tenantID,
+		SiteID:   siteID,
+		Name:     req.Name,
+		Status:   models.KOSStatusPending,
+	}
+
+	if err := a.repos.KOSInstance.Create(c.Request.Context(), instance); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to create KOS instance")
+		return
+	}
+
+	createdResponse(c, instance)
+}
+
+func (a *Application) getKOSInstance(c *gin.Context) {
+	id, ok := getObjectID(c, "id")
+	if !ok {
+		return
+	}
+
+	instance, err := a.repos.KOSInstance.GetByID(c.Request.Context(), id)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to get KOS instance")
+		return
+	}
+	if instance == nil {
+		errorResponse(c, http.StatusNotFound, "NOT_FOUND", "KOS instance not found")
+		return
+	}
+
+	successResponse(c, instance)
+}
+
+func (a *Application) updateKOSInstance(c *gin.Context) {
+	id, ok := getObjectID(c, "id")
+	if !ok {
+		return
+	}
+
+	instance, err := a.repos.KOSInstance.GetByID(c.Request.Context(), id)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to get KOS instance")
+		return
+	}
+	if instance == nil {
+		errorResponse(c, http.StatusNotFound, "NOT_FOUND", "KOS instance not found")
+		return
+	}
+
+	var req UpdateKOSInstanceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, http.StatusBadRequest, "INVALID_INPUT", err.Error())
+		return
+	}
+
+	if req.Name != "" {
+		instance.Name = req.Name
+	}
+	if req.Status != "" {
+		instance.Status = models.KOSStatus(req.Status)
+	}
+
+	if err := a.repos.KOSInstance.Update(c.Request.Context(), instance); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to update KOS instance")
+		return
+	}
+
+	successResponse(c, instance)
+}
+
+// ProvisioningBundle contains all data needed to provision a KOS instance
+type ProvisioningBundle struct {
+	KOSID          string `json:"kos_id"`
+	TenantID       string `json:"tenant_id"`
+	SiteID         string `json:"site_id"`
+	KWSEndpoint    string `json:"kws_endpoint"`
+	Certificate    string `json:"certificate"`
+	PrivateKey     string `json:"private_key"`
+	CACertificate  string `json:"ca_certificate"`
+	JWTSecret      string `json:"jwt_secret"`
+	RecipePollSecs int    `json:"recipe_poll_secs"`
+	OrderPollSecs  int    `json:"order_poll_secs"`
+}
+
+func (a *Application) getKOSProvisioningBundle(c *gin.Context) {
+	id, ok := getObjectID(c, "id")
+	if !ok {
+		return
+	}
+
+	instance, err := a.repos.KOSInstance.GetByID(c.Request.Context(), id)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to get KOS instance")
+		return
+	}
+	if instance == nil {
+		errorResponse(c, http.StatusNotFound, "NOT_FOUND", "KOS instance not found")
+		return
+	}
+
+	// Generate certificate if not already generated
+	if instance.CertificatePEM == "" {
+		cert, key, serial, err := a.generateKOSCertificate(instance)
+		if err != nil {
+			errorResponse(c, http.StatusInternalServerError, "CERT_ERROR", "Failed to generate certificate")
+			return
+		}
+		instance.CertificatePEM = cert
+		instance.PrivateKeyPEM = key
+		instance.CertificateSerial = serial
+		instance.CertificateExpiry = time.Now().AddDate(1, 0, 0) // 1 year
+		instance.Status = models.KOSStatusProvisioned
+
+		if err := a.repos.KOSInstance.Update(c.Request.Context(), instance); err != nil {
+			errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to save certificate")
+			return
+		}
+	}
+
+	bundle := ProvisioningBundle{
+		KOSID:          instance.ID.Hex(),
+		TenantID:       instance.TenantID.Hex(),
+		SiteID:         instance.SiteID.Hex(),
+		KWSEndpoint:    a.config.Server.ExternalURL,
+		Certificate:    instance.CertificatePEM,
+		PrivateKey:     instance.PrivateKeyPEM,
+		CACertificate:  a.config.Certificate.CACert,
+		JWTSecret:      a.config.JWT.Secret,
+		RecipePollSecs: 300, // 5 minutes
+		OrderPollSecs:  30,  // 30 seconds
+	}
+
+	successResponse(c, bundle)
+}
+
+func (a *Application) regenerateKOSCertificate(c *gin.Context) {
+	id, ok := getObjectID(c, "id")
+	if !ok {
+		return
+	}
+
+	instance, err := a.repos.KOSInstance.GetByID(c.Request.Context(), id)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to get KOS instance")
+		return
+	}
+	if instance == nil {
+		errorResponse(c, http.StatusNotFound, "NOT_FOUND", "KOS instance not found")
+		return
+	}
+
+	cert, key, serial, err := a.generateKOSCertificate(instance)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "CERT_ERROR", "Failed to generate certificate")
+		return
+	}
+
+	instance.CertificatePEM = cert
+	instance.PrivateKeyPEM = key
+	instance.CertificateSerial = serial
+	instance.CertificateExpiry = time.Now().AddDate(1, 0, 0)
+
+	if err := a.repos.KOSInstance.Update(c.Request.Context(), instance); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to save certificate")
+		return
+	}
+
+	successResponse(c, gin.H{
+		"certificate_serial": serial,
+		"expires_at":         instance.CertificateExpiry,
+	})
+}
+
+// generateKOSCertificate creates a client certificate for KOS mTLS authentication
+func (a *Application) generateKOSCertificate(instance *models.KOSInstance) (certPEM, keyPEM, serial string, err error) {
+	// Generate private key
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	// Generate serial number
+	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return "", "", "", err
+	}
+
+	// Create certificate template
+	template := x509.Certificate{
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			CommonName:   instance.ID.Hex(),
+			Organization: []string{"KWS"},
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().AddDate(1, 0, 0), // 1 year validity
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		BasicConstraintsValid: true,
+	}
+
+	// Self-sign for now (in production, use CA)
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	// Encode to PEM
+	certPEMBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	keyPEMBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)})
+
+	return string(certPEMBytes), string(keyPEMBytes), serialNumber.String(), nil
+}
+
+// ==================== KOS Device API handlers ====================
+// These endpoints are called by KOS instances to communicate with KWS
+
+type KOSRegisterRequest struct {
+	KOSID   string `json:"kos_id" binding:"required"`
+	Version string `json:"version" binding:"required"`
+}
+
+type KOSHeartbeatRequest struct {
+	KOSID       string         `json:"kos_id" binding:"required"`
+	Status      string         `json:"status" binding:"required"`
+	Version     string         `json:"version"`
+	Metrics     map[string]any `json:"metrics"`
+	ActiveTasks int            `json:"active_tasks"`
+}
+
+type KOSOrderStatusRequest struct {
+	Status      string     `json:"status" binding:"required"`
+	KOSOrderID  string     `json:"kos_order_id"`
+	StartedAt   *time.Time `json:"started_at"`
+	CompletedAt *time.Time `json:"completed_at"`
+	ErrorMsg    string     `json:"error_msg"`
+}
+
+func (a *Application) kosRegister(c *gin.Context) {
+	var req KOSRegisterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, http.StatusBadRequest, "INVALID_INPUT", err.Error())
+		return
+	}
+
+	kosID, err := primitive.ObjectIDFromHex(req.KOSID)
+	if err != nil {
+		errorResponse(c, http.StatusBadRequest, "INVALID_ID", "Invalid kos_id format")
+		return
+	}
+
+	instance, err := a.repos.KOSInstance.GetByID(c.Request.Context(), kosID)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to get KOS instance")
+		return
+	}
+	if instance == nil {
+		errorResponse(c, http.StatusNotFound, "NOT_FOUND", "KOS instance not found")
+		return
+	}
+
+	// Update status to online
+	instance.Status = models.KOSStatusOnline
+	instance.Version = req.Version
+	now := time.Now()
+	instance.LastHeartbeat = &now
+	instance.RegisteredAt = &now
+
+	if err := a.repos.KOSInstance.Update(c.Request.Context(), instance); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to update KOS instance")
+		return
+	}
+
+	successResponse(c, gin.H{
+		"registered": true,
+		"kos_id":     instance.ID.Hex(),
+		"site_id":    instance.SiteID.Hex(),
+		"tenant_id":  instance.TenantID.Hex(),
+	})
+}
+
+func (a *Application) kosHeartbeat(c *gin.Context) {
+	var req KOSHeartbeatRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, http.StatusBadRequest, "INVALID_INPUT", err.Error())
+		return
+	}
+
+	kosID, err := primitive.ObjectIDFromHex(req.KOSID)
+	if err != nil {
+		errorResponse(c, http.StatusBadRequest, "INVALID_ID", "Invalid kos_id format")
+		return
+	}
+
+	instance, err := a.repos.KOSInstance.GetByID(c.Request.Context(), kosID)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to get KOS instance")
+		return
+	}
+	if instance == nil {
+		errorResponse(c, http.StatusNotFound, "NOT_FOUND", "KOS instance not found")
+		return
+	}
+
+	// Record heartbeat
+	heartbeat := &models.KOSHeartbeat{
+		KOSID:      kosID,
+		Status:     req.Status,
+		ReceivedAt: time.Now(),
+		Metrics:    req.Metrics,
+	}
+
+	if err := a.repos.KOSInstance.RecordHeartbeat(c.Request.Context(), heartbeat); err != nil {
+		a.logger.Warn("Failed to record heartbeat")
+	}
+
+	// Update instance status
+	now := time.Now()
+	instance.LastHeartbeat = &now
+	if req.Version != "" {
+		instance.Version = req.Version
+	}
+	instance.Status = models.KOSStatus(req.Status)
+
+	if err := a.repos.KOSInstance.Update(c.Request.Context(), instance); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to update KOS instance")
+		return
+	}
+
+	successResponse(c, gin.H{"acknowledged": true})
+}
+
+func (a *Application) kosGetRecipes(c *gin.Context) {
+	// Get KOS ID from mTLS certificate CN or JWT
+	kosIDStr := c.GetHeader("X-KOS-ID")
+	if kosIDStr == "" {
+		errorResponse(c, http.StatusUnauthorized, "MISSING_KOS_ID", "KOS ID required")
+		return
+	}
+
+	kosID, err := primitive.ObjectIDFromHex(kosIDStr)
+	if err != nil {
+		errorResponse(c, http.StatusBadRequest, "INVALID_ID", "Invalid kos_id format")
+		return
+	}
+
+	// Get KOS instance to find site
+	instance, err := a.repos.KOSInstance.GetByID(c.Request.Context(), kosID)
+	if err != nil || instance == nil {
+		errorResponse(c, http.StatusNotFound, "NOT_FOUND", "KOS instance not found")
+		return
+	}
+
+	// Get recipes published to this site
+	recipes, err := a.repos.Recipe.GetPublishedForSite(c.Request.Context(), instance.SiteID)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to get recipes")
+		return
+	}
+
+	// Convert to KOS format
+	kosRecipes := make([]models.RecipeForKOS, len(recipes))
+	for i, r := range recipes {
+		kosRecipes[i] = r.ToKOSFormat()
+	}
+
+	successResponse(c, kosRecipes)
+}
+
+func (a *Application) kosGetIngredients(c *gin.Context) {
+	// Get KOS ID from header
+	kosIDStr := c.GetHeader("X-KOS-ID")
+	if kosIDStr == "" {
+		errorResponse(c, http.StatusUnauthorized, "MISSING_KOS_ID", "KOS ID required")
+		return
+	}
+
+	kosID, err := primitive.ObjectIDFromHex(kosIDStr)
+	if err != nil {
+		errorResponse(c, http.StatusBadRequest, "INVALID_ID", "Invalid kos_id format")
+		return
+	}
+
+	// Get KOS instance to find tenant
+	instance, err := a.repos.KOSInstance.GetByID(c.Request.Context(), kosID)
+	if err != nil || instance == nil {
+		errorResponse(c, http.StatusNotFound, "NOT_FOUND", "KOS instance not found")
+		return
+	}
+
+	// Get all active ingredients for this tenant
+	ingredients, _, err := a.repos.Ingredient.ListByTenant(c.Request.Context(), instance.TenantID, true, 1, 10000)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to get ingredients")
+		return
+	}
+
+	// Convert to KOS format
+	kosIngredients := make([]models.IngredientForKOS, len(ingredients))
+	for i, ing := range ingredients {
+		kosIngredients[i] = ing.ToKOSFormat()
+	}
+
+	successResponse(c, kosIngredients)
+}
+
+func (a *Application) kosGetOrders(c *gin.Context) {
+	// Get KOS ID from header
+	kosIDStr := c.GetHeader("X-KOS-ID")
+	if kosIDStr == "" {
+		errorResponse(c, http.StatusUnauthorized, "MISSING_KOS_ID", "KOS ID required")
+		return
+	}
+
+	kosID, err := primitive.ObjectIDFromHex(kosIDStr)
+	if err != nil {
+		errorResponse(c, http.StatusBadRequest, "INVALID_ID", "Invalid kos_id format")
+		return
+	}
+
+	// Get KOS instance to find site
+	instance, err := a.repos.KOSInstance.GetByID(c.Request.Context(), kosID)
+	if err != nil || instance == nil {
+		errorResponse(c, http.StatusNotFound, "NOT_FOUND", "KOS instance not found")
+		return
+	}
+
+	// Get pending orders for this site
+	orders, err := a.repos.Order.GetPendingForSite(c.Request.Context(), instance.SiteID)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to get orders")
+		return
+	}
+
+	// Convert to KOS format
+	kosOrders := make([]models.OrderForKOS, len(orders))
+	for i, o := range orders {
+		kosOrders[i] = o.ToKOSFormat()
+	}
+
+	successResponse(c, kosOrders)
+}
+
+func (a *Application) kosUpdateOrderStatus(c *gin.Context) {
+	id, ok := getObjectID(c, "id")
+	if !ok {
+		return
+	}
+
+	var req KOSOrderStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, http.StatusBadRequest, "INVALID_INPUT", err.Error())
+		return
+	}
+
+	order, err := a.repos.Order.GetByID(c.Request.Context(), id)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to get order")
+		return
+	}
+	if order == nil {
+		errorResponse(c, http.StatusNotFound, "NOT_FOUND", "Order not found")
+		return
+	}
+
+	// Update order status based on KOS feedback
+	order.Status = models.OrderStatus(req.Status)
+	order.KOSSyncStatus = models.KOSSyncStatusSynced
+	if req.KOSOrderID != "" {
+		order.KOSOrderID = req.KOSOrderID
+	}
+	if req.StartedAt != nil {
+		order.StartedAt = req.StartedAt
+	}
+	if req.CompletedAt != nil {
+		order.CompletedAt = req.CompletedAt
+	}
+	if req.ErrorMsg != "" {
+		order.ErrorMessage = req.ErrorMsg
+	}
+
+	now := time.Now()
+	order.KOSSyncedAt = &now
+
+	if err := a.repos.Order.Update(c.Request.Context(), order); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to update order")
+		return
+	}
+
+	successResponse(c, gin.H{"updated": true})
+}

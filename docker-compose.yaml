@@ -1,0 +1,102 @@
+services:
+  # KWS Application
+  kws:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '8000:8080'
+    environment:
+      - KWS_APP_ENV=development
+      - KWS_MONGODB_URI=mongodb://mongodb:27017
+      - KWS_MONGODB_DATABASE=kws
+      - KWS_KEYCLOAK_URL=http://keycloak:8080
+      - KWS_KEYCLOAK_ADMIN_USERNAME=admin
+      - KWS_KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
+    depends_on:
+      - mongodb
+      - keycloak
+    volumes:
+      - ./config:/app/config:ro
+      - kws-certs:/etc/kws/ca
+    networks:
+      - kws-network
+    restart: unless-stopped
+
+  # MongoDB for KWS application data
+  mongodb:
+    image: mongo:latest
+    ports:
+      - '27017:27017'
+    environment:
+      - MONGO_INITDB_DATABASE=kws
+    volumes:
+      - mongodb-data:/data/db
+      - ./scripts/db/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - kws-network
+    restart: unless-stopped
+
+  # PostgreSQL for Keycloak
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=keycloak
+      - POSTGRES_USER=keycloak
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-keycloak}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - kws-network
+    restart: unless-stopped
+
+  # Keycloak for authentication
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    command: start-dev --db=postgres
+    environment:
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak
+      - KC_DB_USERNAME=keycloak
+      - KC_DB_PASSWORD=${POSTGRES_PASSWORD:-keycloak}
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      - KC_HOSTNAME_STRICT=false
+      - KC_HTTP_ENABLED=true
+      - KC_PROXY=edge
+    ports:
+      - '8180:8080'
+    depends_on:
+      - postgres
+    networks:
+      - kws-network
+    restart: unless-stopped
+
+  # Nginx reverse proxy (optional, for mTLS termination)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - '443:443'
+      - '8443:8443'
+    volumes:
+      - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./config/nginx/conf.d:/etc/nginx/conf.d:ro
+      - kws-certs:/etc/kws/ca:ro
+      - nginx-certs:/etc/nginx/ssl:ro
+    depends_on:
+      - kws
+    networks:
+      - kws-network
+    restart: unless-stopped
+    profiles:
+      - production
+
+volumes:
+  mongodb-data:
+  postgres-data:
+  kws-certs:
+  nginx-certs:
+
+networks:
+  kws-network:
+    driver: bridge

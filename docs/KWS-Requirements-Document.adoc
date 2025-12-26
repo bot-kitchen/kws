@@ -1,0 +1,2463 @@
+= KWS (Kitchen Web Service) Requirements Document
+:author: Arun Chandrasekaran
+:revnumber: 1.3
+:revdate: December 2024
+:status: Draft
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: highlight.js
+
+== Executive Summary
+
+=== Purpose
+
+KWS (Kitchen Web Service) is a cloud-based platform designed to provide centralized management, orchestration, and synchronization capabilities for multiple KOS (Kitchen Operating System) deployments. It serves as the B2B backbone enabling restaurant chains, cloud kitchen operators, and food service enterprises to manage their autonomous kitchen infrastructure at scale.
+
+=== Scope
+
+KWS will provide:
+
+* Multi-tenant cloud infrastructure for B2B customers
+* Comprehensive Identity and Access Management (IAM)
+* Role-Based and Policy-Based Access Control (RBAC/PBAC)
+* Recipe management with KWS-as-source-of-truth synchronization
+* Order management with region/site-based routing
+* Fleet management for multiple KOS deployments across regions and sites
+* Analytics, reporting, and operational insights
+* Billing and subscription management
+
+=== Success Criteria
+
+[cols="1,3"]
+|===
+|Metric |Target
+
+|Tenant Support
+|100+ tenants with 1000+ KOS instances collectively
+
+|Uptime SLA
+|99.9% for core synchronization services
+
+|Order Sync Latency
+|Sub-second API response for order polling
+
+|Data Isolation
+|Zero data leakage between tenants
+
+|Compliance
+|SOC 2 Type II readiness
+
+|Deployment Flexibility
+|Runnable on home lab infrastructure (non-cloud)
+|===
+
+== System Context & Vision
+
+=== Vision Statement
+
+KWS enables food service enterprises to deploy, manage, and scale autonomous kitchen operations across multiple locations through a unified cloud platform, while maintaining the reliability and autonomy of individual KOS installations.
+
+=== System Context Diagram
+
+[mermaid]
+----
+flowchart TB
+    subgraph External["External Systems"]
+        POS["POS/ERP Systems"]
+        Delivery["Delivery Partners"]
+        Payment["Payment Gateways"]
+        Supplier["Supplier Systems"]
+    end
+
+    subgraph KWS["KWS Platform"]
+        Gateway["API Gateway"]
+
+        subgraph Services["Core Services"]
+            IAM["IAM Service"]
+            Recipe["Recipe Service"]
+            Order["Order Service"]
+            Fleet["Fleet Service"]
+            Analytics["Analytics Service"]
+        end
+
+        subgraph Data["Data Stores"]
+            MariaDB[("MariaDB\n(Core Data)")]
+            MongoDB[("MongoDB\n(Recipes)")]
+        end
+    end
+
+    subgraph Regions["Regional Deployments"]
+        subgraph Region1["Region: Sacramento"]
+            Site1A["Site: Downtown\n(KOS)"]
+            Site1B["Site: Midtown\n(KOS)"]
+        end
+        subgraph Region2["Region: Fremont"]
+            Site2A["Site: Central\n(KOS)"]
+        end
+    end
+
+    POS --> Gateway
+    Delivery --> Gateway
+    Payment --> Gateway
+    Supplier --> Gateway
+
+    Gateway --> Services
+    Services --> Data
+
+    Site1A -->|"REST API Poll"| Gateway
+    Site1B -->|"REST API Poll"| Gateway
+    Site2A -->|"REST API Poll"| Gateway
+----
+
+=== Relationship with KOS
+
+[cols="1,2,2"]
+|===
+|Aspect |KOS |KWS
+
+|Deployment
+|On-premise per Site
+|Cloud or Home Lab
+
+|Scope
+|Single site (multiple kitchens)
+|Multi-region fleet
+
+|Operation Mode
+|Autonomous (offline-capable)
+|Always connected
+
+|Primary Function
+|Kitchen execution
+|Fleet orchestration
+
+|Data Ownership
+|Local execution data
+|Master data (recipes, orders)
+
+|Recipe Authority
+|Consumer (pulls from KWS)
+|Source of Truth
+|===
+
+=== Offline-First Philosophy
+
+KOS instances must remain fully operational when disconnected from KWS. KOS caches recipes locally and processes orders from its local queue. KWS serves as the master data source, not a runtime dependency.
+
+=== Standard Operating Procedures (SOPs)
+
+[IMPORTANT]
+====
+*SOP-001: Recipe Authority*
+
+Recipes created or modified on KWS always override any local recipe data on KOS. KWS is the single source of truth for all recipe content. KOS instances pull recipes via REST API and cache them locally for execution.
+
+This eliminates bidirectional sync complexity and version conflict resolution.
+====
+
+== Stakeholders
+
+=== Primary Stakeholders
+
+[cols="1,2,2"]
+|===
+|Role |Description |Primary Concerns
+
+|Enterprise Admin
+|IT/Operations leadership at customer org
+|Security, compliance, integration
+
+|Regional Manager
+|Operations manager for a geographic region
+|Cross-site coordination, regional reporting
+
+|Site Manager
+|On-site operations manager
+|Order flow, kitchen operations
+
+|Corporate Chef
+|Recipe development and standardization
+|Recipe management, consistency
+
+|Operations Analyst
+|Business intelligence and reporting
+|Analytics, performance metrics
+
+|System Integrator
+|Third-party integration developers
+|API access, webhooks
+|===
+
+=== Tenant Types
+
+[cols="1,2,2,1"]
+|===
+|Tier |Description |Example |Typical Scale
+
+|Enterprise
+|Large chains with dedicated support
+|Major QSR chains
+|100+ sites
+
+|Growth
+|Mid-size operators
+|Regional chains
+|10-100 sites
+
+|Starter
+|Single or few locations
+|Independent cloud kitchens
+|1-10 sites
+|===
+
+== Geographic Hierarchy
+
+=== Region-Site-Kitchen Model
+
+[mermaid]
+----
+flowchart TB
+    subgraph Tenant["Tenant: ABC Foods"]
+        subgraph R1["Region: Sacramento"]
+            subgraph S1["Site: Downtown"]
+                K1A["Kitchen: Main"]
+                K1B["Kitchen: Express"]
+                KOS1["KOS Instance"]
+                KOS1 --> K1A
+                KOS1 --> K1B
+            end
+            subgraph S2["Site: Midtown"]
+                K2A["Kitchen: Main"]
+                KOS2["KOS Instance"]
+                KOS2 --> K2A
+            end
+        end
+        subgraph R2["Region: Fremont"]
+            subgraph S3["Site: Hub Central"]
+                K3A["Kitchen: North Wing"]
+                K3B["Kitchen: South Wing"]
+                K3C["Kitchen: Catering"]
+                KOS3["KOS Instance"]
+                KOS3 --> K3A
+                KOS3 --> K3B
+                KOS3 --> K3C
+            end
+        end
+    end
+----
+
+=== Hierarchy Definitions
+
+[cols="1,3,2"]
+|===
+|Level |Definition |Example
+
+|Tenant
+|Customer organization using KWS
+|ABC Foods Inc.
+
+|Region
+|Geographic area containing one or more sites
+|Sacramento Metro, Bay Area East
+
+|Site
+|Physical location with one KOS deployment
+|Downtown Branch, Airport Terminal
+
+|Kitchen
+|Individual cooking station/line managed by KOS
+|Main Kitchen, Express Line, Catering
+|===
+
+=== Hierarchy Requirements
+
+[cols="1,4,1"]
+|===
+|ID |Requirement |Priority
+
+|GH-001
+|Each tenant can have multiple regions
+|Critical
+
+|GH-002
+|Each region must have at least one site
+|Critical
+
+|GH-003
+|Each site has exactly one KOS instance
+|Critical
+
+|GH-004
+|Each site can have multiple kitchens
+|Critical
+
+|GH-005
+|Orders must specify region and site
+|Critical
+
+|GH-006
+|Recipes can be assigned at tenant, region, or site level
+|High
+
+|GH-007
+|Regional managers can view/manage all sites in their region
+|High
+
+|GH-008
+|Site managers can only view/manage their assigned site
+|High
+|===
+
+=== Geographic Data Model
+
+[mermaid]
+----
+erDiagram
+    TENANT ||--o{ REGION : contains
+    REGION ||--o{ SITE : contains
+    SITE ||--|| KOS_INSTANCE : has
+    SITE ||--o{ KITCHEN : contains
+
+    TENANT {
+        uuid id PK
+        string name
+        string slug
+        enum status
+    }
+
+    REGION {
+        uuid id PK
+        uuid tenant_id FK
+        string name
+        string code
+        string timezone
+    }
+
+    SITE {
+        uuid id PK
+        uuid region_id FK
+        string name
+        string code
+        string address
+        point coordinates
+    }
+
+    KITCHEN {
+        uuid id PK
+        uuid site_id FK
+        string name
+        string code
+        enum kitchen_type
+    }
+
+    KOS_INSTANCE {
+        uuid id PK
+        uuid site_id FK
+        string device_id
+        datetime last_seen
+        enum status
+    }
+----
+
+== Functional Requirements
+
+=== Multi-Tenancy
+
+==== Tenant Isolation
+
+[cols="1,4,1"]
+|===
+|ID |Requirement |Priority
+
+|MT-001
+|Complete data isolation between tenants at database level
+|Critical
+
+|MT-002
+|Tenant-specific encryption keys for data at rest
+|Critical
+
+|MT-003
+|Tenant-specific rate limiting and quotas
+|High
+
+|MT-004
+|Cross-tenant data access strictly prohibited at application level
+|Critical
+|===
+
+==== Multi-Tenancy Implementation Options
+
+Given the requirement to run KWS on home lab infrastructure initially, we need a lightweight multi-tenancy approach.
+
+===== Option Analysis
+
+[cols="1,2,2,2,1"]
+|===
+|Option |Description |Pros |Cons |Recommendation
+
+|*Custom Row-Level*
+|Add `tenant_id` to all tables with application-enforced isolation
+|Simple, no external deps, full control, works on home lab
+|Must implement carefully, audit overhead
+|✓ *Recommended for MVP*
+
+|*PostgreSQL RLS*
+|Use PostgreSQL Row-Level Security policies
+|Database-enforced, harder to bypass
+|PostgreSQL-specific, complex policies, not available in MariaDB
+|✗ Not compatible with MariaDB
+
+|*Citusdata*
+|Distributed PostgreSQL with tenant sharding
+|Excellent isolation, scalable
+|Complex setup, PostgreSQL only, overkill for home lab
+|✗ Too complex
+
+|*Schema-per-Tenant*
+|Separate database schema per tenant
+|Strong isolation, easy backup/restore per tenant
+|Migration complexity, connection pooling issues
+|Consider for Enterprise tier later
+|===
+
+===== Recommended Approach: Custom Row-Level Isolation
+
+[source,go]
+----
+// TenantContext middleware extracts and validates tenant from JWT
+func TenantContext(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        tenantID := extractTenantFromJWT(r)
+        ctx := context.WithValue(r.Context(), TenantKey, tenantID)
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
+
+// All repository methods include tenant filter
+func (r *OrderRepository) FindByID(ctx context.Context, id uuid.UUID) (*Order, error) {
+    tenantID := ctx.Value(TenantKey).(uuid.UUID)
+    return r.db.Where("id = ? AND tenant_id = ?", id, tenantID).First(&Order{})
+}
+----
+
+==== Tenant Management
+
+[cols="1,4,1"]
+|===
+|ID |Requirement |Priority
+
+|MT-010
+|Self-service tenant provisioning workflow
+|High
+
+|MT-011
+|Tenant suspension and reactivation capabilities
+|High
+
+|MT-012
+|Tenant data export (portability)
+|Medium
+
+|MT-013
+|Tenant deletion with complete data purge
+|High
+
+|MT-014
+|Tenant hierarchy support (parent/child organizations)
+|Low
+|===
+
+=== Identity and Access Management (IAM)
+
+==== Identity Management
+
+[cols="1,4,1"]
+|===
+|ID |Requirement |Priority
+
+|IAM-001
+|User registration with email verification
+|Critical
+
+|IAM-002
+|Multi-factor authentication (TOTP, SMS, Email)
+|Critical
+
+|IAM-003
+|Password policies (complexity, rotation, history)
+|Critical
+
+|IAM-004
+|SSO integration via SAML 2.0
+|Medium
+
+|IAM-005
+|SSO integration via OIDC
+|High
+
+|IAM-006
+|Service accounts for API access (KOS instances)
+|Critical
+
+|IAM-007
+|API key management with scoped permissions
+|Critical
+
+|IAM-008
+|Session management with configurable timeouts
+|High
+
+|IAM-009
+|Account lockout after failed attempts
+|Critical
+|===
+
+==== Authentication Flows
+
+[mermaid]
+----
+flowchart LR
+    subgraph UserLogin["User Login Flow"]
+        direction LR
+        UL1["Credentials\nVerify"] --> UL2["MFA\nVerify"]
+        UL2 --> UL3["Session\nCreate"]
+        UL3 --> UL4["JWT\nIssue"]
+    end
+
+    subgraph KOSAuth["KOS Instance Authentication"]
+        direction LR
+        K1["API Key\nVerify"] --> K2["Site\nLookup"]
+        K2 --> K3["Scope\nCheck"]
+        K3 --> K4["Access\nGrant"]
+    end
+----
+
+==== Token Management
+
+[cols="1,4,1"]
+|===
+|ID |Requirement |Priority
+
+|IAM-020
+|JWT-based access tokens with short expiry (15 min)
+|Critical
+
+|IAM-021
+|Refresh token rotation
+|Critical
+
+|IAM-022
+|Token revocation capabilities
+|Critical
+
+|IAM-023
+|API keys for KOS instances (long-lived, scoped)
+|Critical
+|===
+
+=== Role-Based Access Control (RBAC) & Policy-Based Access Control (PBAC)
+
+==== Build vs. Buy Analysis
+
+Given the home lab deployment requirement (8 cores, 64GB RAM available) and the need for both Authentication AND Authorization with a management UI, we need to evaluate comprehensive IAM solutions.
+
+===== Option Analysis
+
+[cols="1,2,2,2,1,1"]
+|===
+|Option |Description |Pros |Cons |Home Lab Ready |Recommendation
+
+|*Keycloak*
+|Full IAM solution with Authentication, Authorization, and Admin UI
+|Complete solution (AuthN + AuthZ), built-in Admin UI, OIDC/SAML/OAuth2, MFA, user federation, fine-grained RBAC, active community, extensive documentation
+|Java-based (higher memory), more complex than library solutions
+|✓ Yes (with 64GB RAM)
+|✓ *Recommended*
+
+|*Casbin*
+|Go library for access control only (RBAC, ABAC, PBAC)
+|Embedded library, lightweight, Go native
+|Authorization only - no authentication, no built-in UI, must build user management
+|✓ Yes
+|Not recommended alone
+
+|*Open Policy Agent (OPA)*
+|General-purpose policy engine using Rego language
+|Very flexible, cloud-native, large ecosystem
+|Separate service, Rego is complex, no authentication, no UI
+|△ Possible
+|Not recommended
+
+|*Ory Stack (Kratos + Keto)*
+|Modern identity (Kratos) + permissions (Keto)
+|Cloud-native, headless, good APIs
+|Two services to deploy, no built-in admin UI, steeper learning curve
+|△ Possible
+|Consider for cloud migration
+
+|*Custom Build*
+|Build authentication and authorization from scratch
+|Full control
+|Significant development time, security risks, no admin UI
+|✓ Yes
+|Not recommended
+
+|*Auth0/Okta*
+|SaaS identity platforms
+|Easy setup, full features
+|SaaS dependency, cost at scale, not home lab friendly
+|✗ No
+|Not for MVP
+|===
+
+===== Recommended Approach: Keycloak
+
+Keycloak provides a complete identity and access management solution with both Authentication and Authorization, plus a comprehensive admin UI out of the box.
+
+[mermaid]
+----
+flowchart TB
+    subgraph HomeLab["Home Lab Infrastructure"]
+        subgraph Keycloak["Keycloak Server"]
+            AdminUI["Admin Console\n(Web UI)"]
+            AuthN["Authentication\n(OIDC/SAML)"]
+            AuthZ["Authorization\n(Fine-grained RBAC)"]
+            UserFed["User Federation\n(LDAP optional)"]
+        end
+
+        subgraph KWS["KWS Application"]
+            API["API Gateway"]
+            OIDC["OIDC Client"]
+            PolicyEnf["Policy Enforcer"]
+        end
+
+        MariaDB[("MariaDB\n(Keycloak DB)")]
+    end
+
+    AdminUI --> AuthN
+    AdminUI --> AuthZ
+    API --> OIDC
+    OIDC -->|"Validate Token"| AuthN
+    API --> PolicyEnf
+    PolicyEnf -->|"Check Permission"| AuthZ
+    Keycloak --> MariaDB
+----
+
+*Why Keycloak:*
+
+1. *Complete IAM Solution*: Provides both Authentication AND Authorization in one package
+2. *Built-in Admin UI*: Full-featured web console for user, role, and permission management
+3. *Standard Protocols*: OIDC, OAuth 2.0, SAML 2.0 support for SSO integration
+4. *Fine-grained Authorization*: Resource-based permissions, policies, and scopes
+5. *Multi-tenancy Ready*: Realm concept maps directly to our tenant model
+6. *MFA Built-in*: TOTP, WebAuthn, SMS (via SPI), email verification
+7. *User Federation*: Can integrate with LDAP/AD for enterprise customers
+8. *Home Lab Ready*: With 64GB RAM available, Keycloak's ~2GB footprint is manageable
+9. *Production Proven*: Used by Red Hat, government agencies, and enterprises
+10. *Active Development*: Regular releases, strong community, extensive documentation
+
+===== Keycloak Realm Strategy (Multi-tenancy)
+
+Each tenant gets their own Keycloak Realm, providing complete isolation:
+
+[mermaid]
+----
+flowchart TB
+    subgraph Keycloak["Keycloak Instance"]
+        subgraph Master["Master Realm"]
+            PlatformAdmins["Platform Admins"]
+        end
+
+        subgraph TenantA["Realm: tenant-abc-foods"]
+            UsersA["Users"]
+            RolesA["Roles"]
+            ClientsA["Clients (KWS, Mobile)"]
+            AuthzA["Authorization Policies"]
+        end
+
+        subgraph TenantB["Realm: tenant-xyz-kitchens"]
+            UsersB["Users"]
+            RolesB["Roles"]
+            ClientsB["Clients"]
+            AuthzB["Authorization Policies"]
+        end
+    end
+----
+
+===== Keycloak Role Configuration
+
+[source,yaml]
+----
+# Realm roles per tenant
+realm_roles:
+  - name: tenant_owner
+    description: Full access to tenant, including billing and user management
+    composite_roles: [tenant_admin]
+
+  - name: tenant_admin
+    description: Administrative access, user management, all operations
+    composite_roles: [regional_manager, recipe_manager, analytics_viewer]
+
+  - name: regional_manager
+    description: Manage all sites in assigned regions
+    composite_roles: [site_manager]
+
+  - name: site_manager
+    description: Manage assigned site operations
+    composite_roles: [kitchen_operator]
+
+  - name: kitchen_operator
+    description: View orders, acknowledge tasks
+
+  - name: recipe_manager
+    description: Full recipe CRUD, publish to sites
+    composite_roles: [recipe_editor]
+
+  - name: recipe_editor
+    description: Edit recipes, cannot publish
+
+  - name: analytics_viewer
+    description: View dashboards and reports
+
+# Client roles for fine-grained API access
+client_roles:
+  kws-api:
+    - recipes:read
+    - recipes:write
+    - recipes:publish
+    - orders:read
+    - orders:write
+    - orders:cancel
+    - sites:read
+    - sites:write
+    - regions:read
+    - regions:write
+    - users:read
+    - users:write
+    - analytics:read
+----
+
+===== Keycloak Authorization Services
+
+Keycloak's Authorization Services provide fine-grained access control:
+
+[source,json]
+----
+{
+  "resources": [
+    {
+      "name": "Region",
+      "type": "kws:region",
+      "uris": ["/api/v1/regions/*"],
+      "scopes": ["read", "write", "delete"]
+    },
+    {
+      "name": "Site",
+      "type": "kws:site",
+      "uris": ["/api/v1/sites/*"],
+      "scopes": ["read", "write", "delete"]
+    },
+    {
+      "name": "Recipe",
+      "type": "kws:recipe",
+      "uris": ["/api/v1/recipes/*"],
+      "scopes": ["read", "write", "delete", "publish"]
+    },
+    {
+      "name": "Order",
+      "type": "kws:order",
+      "uris": ["/api/v1/orders/*"],
+      "scopes": ["read", "write", "cancel"]
+    }
+  ],
+  "policies": [
+    {
+      "name": "Regional Manager Policy",
+      "type": "role",
+      "logic": "POSITIVE",
+      "roles": ["regional_manager"]
+    },
+    {
+      "name": "Site Scope Policy",
+      "type": "js",
+      "code": "// Check if user has access to the specific site\nvar siteId = $evaluation.getContext().getAttributes().getValue('site_id');\nvar userSites = $evaluation.getContext().getIdentity().getAttributes().getValue('assigned_sites');\nif (userSites.contains(siteId)) { $evaluation.grant(); }"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "Site Read Permission",
+      "type": "scope",
+      "resources": ["Site"],
+      "scopes": ["read"],
+      "policies": ["Regional Manager Policy", "Site Scope Policy"]
+    }
+  ]
+}
+----
+
+===== KWS Integration with Keycloak
+
+[source,go]
+----
+package auth
+
+import (
+    "context"
+    "net/http"
+
+    "github.com/coreos/go-oidc/v3/oidc"
+    "golang.org/x/oauth2"
+)
+
+type KeycloakAuth struct {
+    provider     *oidc.Provider
+    verifier     *oidc.IDTokenVerifier
+    oauth2Config oauth2.Config
+    keycloakURL  string
+    realm        string
+}
+
+func NewKeycloakAuth(keycloakURL, realm, clientID, clientSecret string) (*KeycloakAuth, error) {
+    ctx := context.Background()
+    issuerURL := fmt.Sprintf("%s/realms/%s", keycloakURL, realm)
+
+    provider, err := oidc.NewProvider(ctx, issuerURL)
+    if err != nil {
+        return nil, fmt.Errorf("failed to get provider: %w", err)
+    }
+
+    return &KeycloakAuth{
+        provider: provider,
+        verifier: provider.Verifier(&oidc.Config{ClientID: clientID}),
+        oauth2Config: oauth2.Config{
+            ClientID:     clientID,
+            ClientSecret: clientSecret,
+            Endpoint:     provider.Endpoint(),
+            Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
+        },
+        keycloakURL: keycloakURL,
+        realm:       realm,
+    }, nil
+}
+
+// Middleware validates JWT and extracts claims
+func (k *KeycloakAuth) AuthMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        token := extractBearerToken(r)
+        if token == "" {
+            http.Error(w, "Unauthorized", http.StatusUnauthorized)
+            return
+        }
+
+        idToken, err := k.verifier.Verify(r.Context(), token)
+        if err != nil {
+            http.Error(w, "Invalid token", http.StatusUnauthorized)
+            return
+        }
+
+        var claims struct {
+            TenantID       string   `json:"tenant_id"`
+            RealmRoles     []string `json:"realm_roles"`
+            ResourceAccess map[string]struct {
+                Roles []string `json:"roles"`
+            } `json:"resource_access"`
+        }
+        if err := idToken.Claims(&claims); err != nil {
+            http.Error(w, "Invalid claims", http.StatusUnauthorized)
+            return
+        }
+
+        ctx := context.WithValue(r.Context(), TenantKey, claims.TenantID)
+        ctx = context.WithValue(ctx, RolesKey, claims.RealmRoles)
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
+
+// CheckPermission uses Keycloak's Authorization Services
+func (k *KeycloakAuth) CheckPermission(ctx context.Context, resource, scope string) (bool, error) {
+    token := getTokenFromContext(ctx)
+
+    // Call Keycloak's token endpoint with permission request
+    req := PermissionRequest{
+        Audience:    "kws-api",
+        Permissions: []Permission{{Resource: resource, Scopes: []string{scope}}},
+    }
+
+    // POST to /realms/{realm}/protocol/openid-connect/token
+    // with grant_type=urn:ietf:params:oauth:grant-type:uma-ticket
+    resp, err := k.requestPermission(token, req)
+    return resp.Allowed, err
+}
+----
+
+===== Keycloak Docker Deployment
+
+[source,yaml]
+----
+# docker-compose.yml addition for Keycloak
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0
+    command: start-dev --db=mariadb
+    environment:
+      - KC_DB=mariadb
+      - KC_DB_URL=jdbc:mariadb://mariadb:3306/keycloak
+      - KC_DB_USERNAME=keycloak
+      - KC_DB_PASSWORD=${KEYCLOAK_DB_PASSWORD}
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD}
+      - KC_HOSTNAME=auth.yourdomain.com
+      - KC_PROXY=edge
+    ports:
+      - "8180:8080"
+    depends_on:
+      - mariadb
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  mariadb:
+    image: mariadb:10.11
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+      - MYSQL_DATABASE=kws
+    # Additional database for Keycloak created via init script
+----
+
+===== Resource Requirements
+
+[cols="1,2,2"]
+|===
+|Component |Memory |CPU
+
+|Keycloak
+|1.5-2 GB
+|1-2 cores
+
+|KWS API
+|512 MB - 1 GB
+|1-2 cores
+
+|MariaDB
+|1-2 GB
+|1-2 cores
+
+|MongoDB
+|512 MB - 1 GB
+|1 core
+
+|*Total (Home Lab)*
+|*~5 GB*
+|*4-7 cores*
+|===
+
+With 64GB RAM and 8 cores available on two boxes, this is well within capacity.
+
+==== Role Hierarchy
+
+[mermaid]
+----
+flowchart TB
+    subgraph Platform["Platform Level (KWS Internal)"]
+        PA["Platform Admin"]
+        PS["Platform Support"]
+        PA --> PS
+    end
+
+    subgraph TenantLevel["Tenant Level"]
+        TO["Tenant Owner"]
+        TA["Tenant Admin"]
+
+        RM["Regional Manager"]
+        SM["Site Manager"]
+        KO["Kitchen Operator"]
+
+        Chef["Recipe Manager"]
+        RE["Recipe Editor"]
+
+        AV["Analytics Viewer"]
+
+        TO --> TA
+        TA --> RM
+        TA --> Chef
+        TA --> AV
+
+        RM --> SM
+        SM --> KO
+
+        Chef --> RE
+    end
+----
+
+==== Default Roles
+
+[cols="1,2,3"]
+|===
+|Role |Scope |Typical Permissions
+
+|Tenant Owner
+|Entire tenant
+|Full access, billing, user management
+
+|Tenant Admin
+|Entire tenant
+|User management, settings, all operations
+
+|Regional Manager
+|Assigned regions
+|All sites in region, orders, reports
+
+|Site Manager
+|Assigned site
+|Site orders, local operations, site reports
+
+|Kitchen Operator
+|Assigned site
+|View orders, acknowledge tasks
+
+|Recipe Manager
+|Entire tenant
+|Full recipe CRUD, publish to sites
+
+|Recipe Editor
+|Entire tenant
+|Edit recipes, cannot publish
+
+|Analytics Viewer
+|Entire tenant
+|View dashboards and reports
+|===
+
+==== Permission Catalog
+
+[cols="1,2,2"]
+|===
+|Resource |Actions |Description
+
+|`tenant`
+|read, update
+|Tenant settings
+
+|`users`
+|create, read, update, delete, invite
+|User management
+
+|`roles`
+|create, read, update, delete, assign
+|Role management
+
+|`regions`
+|create, read, update, delete
+|Region management
+
+|`sites`
+|create, read, update, delete
+|Site management
+
+|`kitchens`
+|create, read, update, delete
+|Kitchen management
+
+|`kos-instances`
+|register, read, update, decommission
+|KOS device management
+
+|`recipes`
+|create, read, update, delete, publish
+|Recipe management
+
+|`orders`
+|create, read, update, cancel
+|Order management
+
+|`ingredients`
+|create, read, update, delete
+|Ingredient master data
+
+|`reports`
+|read, export
+|Analytics and reporting
+
+|`api-keys`
+|create, read, revoke
+|API key management
+|===
+
+=== Recipe Management
+
+==== Recipe Authority Model
+
+[IMPORTANT]
+====
+*SOP-001: KWS is the Single Source of Truth*
+
+* All recipes are created and managed in KWS
+* KOS instances pull recipes via REST API
+* Any local recipe modifications on KOS are considered temporary/development
+* Production KOS instances always fetch from KWS
+* No bidirectional sync - eliminates version conflict complexity
+====
+
+==== Recipe Lifecycle
+
+[mermaid]
+----
+stateDiagram-v2
+    [*] --> Draft: Create
+    Draft --> Review: Submit
+    Review --> Draft: Request Changes
+    Review --> Published: Approve
+    Published --> Draft: Edit (creates new version)
+    Published --> Archived: Archive
+    Archived --> Draft: Restore
+----
+
+==== Recipe API (for KOS consumption)
+
+KOS instances fetch recipes via REST API rather than push-based MQTT sync. This approach:
+
+* Simplifies architecture (no message broker dependency)
+* Works with offline-first model (KOS polls when connected)
+* Reuses same API for web UI and external integrations
+* Enables caching at multiple levels
+
+===== Recipe Endpoints
+
+[source]
+----
+# Recipe API for KOS and Web UI
+
+GET  /api/v1/recipes
+     ?site_id={site_id}           # Filter by site assignment
+     &updated_since={timestamp}   # Incremental sync
+     &status=published            # Only published recipes
+
+GET  /api/v1/recipes/{recipe_id}
+
+GET  /api/v1/recipes/{recipe_id}/steps
+     ?include_ingredients=true
+
+GET  /api/v1/recipes/{recipe_id}/full
+     # Returns complete recipe with all steps and ingredients
+----
+
+===== KOS Recipe Sync Flow
+
+[mermaid]
+----
+sequenceDiagram
+    participant KOS
+    participant Cache as "Local Cache"
+    participant KWS as "KWS API"
+
+    Note over KOS: On startup or scheduled interval
+
+    KOS->>Cache: Get last_sync_timestamp
+    Cache-->>KOS: timestamp (or null)
+
+    KOS->>KWS: GET /recipes?site_id=X&updated_since=timestamp
+    KWS-->>KOS: Recipe list with versions
+
+    loop For each updated recipe
+        KOS->>KWS: GET /recipes/{id}/full
+        KWS-->>KOS: Complete recipe data
+        KOS->>Cache: Store recipe
+    end
+
+    KOS->>Cache: Update last_sync_timestamp
+
+    Note over KOS: Ready for order execution
+----
+
+==== Recipe Data Model
+
+[mermaid]
+----
+erDiagram
+    RECIPE ||--o{ RECIPE_STEP : contains
+    RECIPE_STEP ||--o{ STEP_INGREDIENT : uses
+    INGREDIENT ||--o{ STEP_INGREDIENT : used_in
+    RECIPE ||--o{ RECIPE_SITE_ASSIGNMENT : assigned_to
+    SITE ||--o{ RECIPE_SITE_ASSIGNMENT : has
+
+    RECIPE {
+        uuid id PK
+        uuid tenant_id FK
+        string name
+        string description
+        string version
+        enum status
+        int prep_time_seconds
+        int cook_time_seconds
+        datetime created_at
+        datetime updated_at
+    }
+
+    RECIPE_STEP {
+        uuid id PK
+        uuid recipe_id FK
+        int sequence
+        string instruction
+        int duration_seconds
+        string equipment_type
+        json parameters
+    }
+
+    STEP_INGREDIENT {
+        uuid id PK
+        uuid step_id FK
+        uuid ingredient_id FK
+        decimal quantity
+        string unit
+    }
+
+    RECIPE_SITE_ASSIGNMENT {
+        uuid recipe_id FK
+        uuid site_id FK
+        datetime assigned_at
+    }
+----
+
+==== Recipe Requirements
+
+[cols="1,4,1"]
+|===
+|ID |Requirement |Priority
+
+|RS-001
+|KWS is single source of truth for recipes
+|Critical
+
+|RS-002
+|KOS pulls recipes via REST API
+|Critical
+
+|RS-003
+|Incremental sync via `updated_since` parameter
+|High
+
+|RS-004
+|Recipe assignment at tenant, region, or site level
+|High
+
+|RS-005
+|Recipe versioning with monotonically increasing version number
+|Critical
+
+|RS-006
+|When recipe version increases, KOS deletes and recreates all recipe steps and ingredients
+|Critical
+
+|RS-007
+|Recipe validation before publishing
+|Critical
+
+|RS-008
+|Equipment compatibility metadata
+|Medium
+
+|RS-009
+|Recipe categorization and tagging
+|Medium
+|===
+
+=== Order Management
+
+==== Order Placement Rules
+
+[IMPORTANT]
+====
+*SOP-002: Order Routing*
+
+* Every order MUST specify a region and site
+* Orders are routed to the specific site's KOS instance
+* KOS polls for orders with `execution_time` within next 30 minutes
+* Orders without region/site are rejected at API level
+====
+
+==== Order Flow
+
+[mermaid]
+----
+flowchart TB
+    subgraph External["Order Sources"]
+        POS["POS System"]
+        Web["Website"]
+        Agg["Aggregators"]
+    end
+
+    subgraph KWS["KWS"]
+        Validate["Validate Order\n(region + site required)"]
+        Store["Store Order"]
+        Queue["Order Queue\n(by site)"]
+    end
+
+    subgraph KOS["KOS at Site"]
+        Poll["Poll Orders API\n(every 30 sec)"]
+        Filter["Filter: exec_time\nwithin 30 min"]
+        Execute["Execute Order"]
+        Status["Update Status"]
+    end
+
+    POS --> Validate
+    Web --> Validate
+    Agg --> Validate
+
+    Validate -->|"Valid"| Store
+    Validate -->|"Invalid"| Reject["Reject\n(400 Bad Request)"]
+    Store --> Queue
+
+    Poll -->|"GET /orders?site_id=X&exec_within=30m"| Queue
+    Queue --> Filter
+    Filter --> Execute
+    Execute --> Status
+    Status -->|"PATCH /orders/{id}/status"| KWS
+----
+
+==== Order Polling Requirements
+
+[cols="1,4,1"]
+|===
+|ID |Requirement |Priority
+
+|OP-001
+|Region and site are mandatory fields for order creation
+|Critical
+
+|OP-002
+|KOS polls orders API every 30 seconds
+|High
+
+|OP-003
+|Orders returned if execution_time is within 30 minutes
+|Critical
+
+|OP-004
+|Order status updates via REST API (not MQTT)
+|High
+
+|OP-005
+|Support for order priority levels
+|Medium
+
+|OP-006
+|Order cancellation before execution starts
+|High
+|===
+
+==== Order API
+
+[source]
+----
+# Order endpoints
+
+POST /api/v1/orders
+     # Body must include region_id and site_id
+
+GET  /api/v1/orders
+     ?site_id={site_id}                    # Required for KOS
+     &execution_within_minutes=30          # Filter for upcoming orders
+     &status=pending,accepted              # Filter by status
+
+GET  /api/v1/orders/{order_id}
+
+PATCH /api/v1/orders/{order_id}/status
+      # Body: { "status": "in_progress" | "completed" | "failed" }
+
+POST /api/v1/orders/{order_id}/cancel
+----
+
+==== Order Request Schema
+
+[source,json]
+----
+{
+  "region_id": "uuid",           // Required
+  "site_id": "uuid",             // Required
+  "kitchen_id": "uuid",          // Optional, auto-assigned if not specified
+  "execution_time": "2024-12-20T14:30:00Z",  // When to start cooking
+  "priority": "normal",          // low, normal, high, urgent
+  "items": [
+    {
+      "recipe_id": "uuid",
+      "quantity": 2,
+      "modifications": []
+    }
+  ],
+  "customer": {
+    "name": "John Doe",
+    "order_reference": "POS-12345"
+  }
+}
+----
+
+==== Order State Machine
+
+[mermaid]
+----
+stateDiagram-v2
+    [*] --> pending: Order Created
+    pending --> accepted: KOS Acknowledges
+    pending --> cancelled: Cancel Request
+    accepted --> in_progress: Start Cooking
+    accepted --> cancelled: Cancel Request
+    in_progress --> completed: Finish
+    in_progress --> failed: Error
+
+    cancelled --> [*]
+    completed --> [*]
+    failed --> [*]
+----
+
+==== Order Data Model
+
+[mermaid]
+----
+erDiagram
+    ORDER ||--o{ ORDER_ITEM : contains
+    ORDER ||--o{ ORDER_STATUS_HISTORY : tracks
+    REGION ||--o{ ORDER : placed_in
+    SITE ||--o{ ORDER : assigned_to
+    KITCHEN ||--o{ ORDER : executed_by
+    RECIPE ||--o{ ORDER_ITEM : references
+
+    ORDER {
+        uuid id PK
+        uuid tenant_id FK
+        uuid region_id FK
+        uuid site_id FK
+        uuid kitchen_id FK
+        string order_reference
+        datetime execution_time
+        enum priority
+        enum status
+        datetime created_at
+        datetime updated_at
+    }
+
+    ORDER_ITEM {
+        uuid id PK
+        uuid order_id FK
+        uuid recipe_id FK
+        int quantity
+        json modifications
+    }
+
+    ORDER_STATUS_HISTORY {
+        uuid id PK
+        uuid order_id FK
+        enum status
+        string notes
+        datetime created_at
+    }
+----
+
+=== Fleet Management
+
+==== KOS Instance Management
+
+[cols="1,4,1"]
+|===
+|ID |Requirement |Priority
+
+|FM-001
+|KOS instance authentication via mTLS client certificates
+|Critical
+
+|FM-002
+|Instance health tracking via heartbeat
+|Critical
+
+|FM-003
+|Instance configuration management
+|High
+
+|FM-004
+|One KOS instance per site
+|Critical
+
+|FM-005
+|Instance can manage multiple kitchens
+|High
+
+|FM-006
+|Instance decommissioning workflow
+|Medium
+
+|FM-007
+|KOS ID auto-generated on first run and stored in database (survives container restarts)
+|Critical
+
+|FM-008
+|Site ID and Tenant ID stored in KOS database after initial provisioning
+|High
+|===
+
+==== KOS Authentication (mTLS)
+
+KOS instances authenticate to KWS using mutual TLS (mTLS) with client certificates. This provides:
+
+* Strong cryptographic identity verification
+* No API keys to rotate or manage
+* Certificate-based access revocation
+* Audit trail via certificate serial numbers
+
+[IMPORTANT]
+====
+*SOP-003: KOS Identity Management*
+
+* KOS ID is auto-generated (UUID) on first startup and stored in the local database
+* The KOS ID persists across container restarts and application upgrades
+* mTLS certificates are issued during KOS provisioning and identify the KOS instance
+* No identity information is stored in config files - all in database
+====
+
+==== KOS Heartbeat
+
+[source]
+----
+POST /api/v1/kos/heartbeat
+X-KOS-ID: {kos_id}
+# mTLS provides authentication via client certificate
+
+{
+  "instance_id": "uuid",
+  "site_id": "uuid",
+  "status": "healthy",
+  "kitchens": [
+    {
+      "kitchen_id": "uuid",
+      "status": "active",
+      "current_orders": 3
+    }
+  ],
+  "metrics": {
+    "cpu_percent": 45,
+    "memory_percent": 62,
+    "disk_percent": 30
+  }
+}
+----
+
+=== Analytics & Reporting
+
+==== Analytics Requirements
+
+[cols="1,4,1"]
+|===
+|ID |Requirement |Priority
+
+|AN-001
+|Order volume by region/site
+|High
+
+|AN-002
+|Recipe popularity metrics
+|High
+
+|AN-003
+|Order completion times
+|High
+
+|AN-004
+|Site performance comparison
+|Medium
+
+|AN-005
+|Export to common formats (CSV, PDF)
+|High
+|===
+
+=== External Integrations
+
+==== Integration Types
+
+[cols="1,1,1,1"]
+|===
+|Integration |Direction |Protocol |Priority
+
+|POS Systems
+|Inbound
+|REST API
+|Critical
+
+|Delivery Aggregators
+|Inbound
+|REST/Webhooks
+|High
+
+|Notification Services
+|Outbound
+|REST API
+|Medium
+|===
+
+==== Webhook System
+
+[cols="1,4,1"]
+|===
+|ID |Requirement |Priority
+
+|WH-001
+|Configurable webhook endpoints per event type
+|High
+
+|WH-002
+|Webhook payload signing (HMAC)
+|Critical
+
+|WH-003
+|Retry with exponential backoff
+|High
+
+|WH-004
+|Webhook delivery logs
+|Medium
+|===
+
+== Non-Functional Requirements
+
+=== Performance
+
+[cols="1,3,1,1"]
+|===
+|ID |Requirement |Target |Priority
+
+|PF-001
+|API response time (p95)
+|< 200ms
+|Critical
+
+|PF-002
+|Recipe list API response
+|< 500ms
+|High
+
+|PF-003
+|Order polling API response
+|< 100ms
+|Critical
+
+|PF-004
+|Dashboard load time
+|< 3s
+|High
+
+|PF-005
+|Concurrent API requests per tenant
+|500 RPS
+|High
+|===
+
+=== Scalability
+
+[cols="1,3,1,1"]
+|===
+|ID |Requirement |Target |Priority
+
+|SC-001
+|Tenant capacity
+|100+ tenants
+|High
+
+|SC-002
+|Sites per tenant
+|500+ sites
+|High
+
+|SC-003
+|Concurrent KOS connections
+|1,000+
+|High
+
+|SC-004
+|Orders per day (platform)
+|100K+ orders
+|High
+
+|SC-005
+|Recipe catalog size per tenant
+|5,000+ recipes
+|Medium
+|===
+
+=== Availability
+
+[cols="1,3,1,1"]
+|===
+|ID |Requirement |Target |Priority
+
+|AV-001
+|Platform uptime
+|99.9%
+|Critical
+
+|AV-002
+|Recovery Time Objective (RTO)
+|< 1 hour
+|Critical
+
+|AV-003
+|Recovery Point Objective (RPO)
+|< 5 minutes
+|Critical
+|===
+
+=== Security
+
+[cols="1,4,1"]
+|===
+|ID |Requirement |Priority
+
+|SE-001
+|TLS 1.3 for all communications
+|Critical
+
+|SE-002
+|Data encryption at rest (AES-256)
+|Critical
+
+|SE-003
+|API key hashing (bcrypt/argon2)
+|Critical
+
+|SE-004
+|Rate limiting per API key
+|High
+
+|SE-005
+|Audit logging for all mutations
+|Critical
+|===
+
+== Data Architecture
+
+=== Database Selection
+
+==== Database: MongoDB Only
+
+[cols="1,3"]
+|===
+|Aspect |Decision
+
+|Choice
+|MongoDB 7.0+ (single database for all KWS data)
+
+|Rationale
+|Simpler stack for home lab, document model fits recipes/orders naturally, schema flexibility, KOS remains on MariaDB with API-based integration
+
+|Use Cases
+|All KWS data: tenants, regions, sites, orders, recipes, ingredients, audit logs
+
+|Deployment
+|Single instance for home lab, replica set for production
+|===
+
+==== Why MongoDB Only (No Hybrid)?
+
+[mermaid]
+----
+flowchart TB
+    subgraph KWS["KWS (MongoDB)"]
+        Tenants["Tenants"]
+        Regions["Regions"]
+        Sites["Sites"]
+        Orders["Orders"]
+        Recipes["Recipes"]
+        Ingredients["Ingredients"]
+        Audit["Audit Logs"]
+    end
+
+    subgraph KOS["KOS (MariaDB - unchanged)"]
+        LocalOrders["Local Orders"]
+        LocalRecipes["Recipe Cache"]
+        Devices["Devices"]
+    end
+
+    KOS -->|"REST API Poll"| KWS
+----
+
+*Rationale:*
+
+1. *Simpler Stack*: One database to manage, backup, and replicate on home lab
+2. *Document Model Fits*: Recipes, orders with items, tenant configurations are hierarchical
+3. *Schema Flexibility*: Different recipe types, order modifications benefit from flexible schemas
+4. *KOS Stays Unchanged*: KOS keeps MariaDB; communication via REST API only
+5. *MongoDB Transactions*: Multi-document ACID transactions (MongoDB 4.0+) for order processing
+6. *Keycloak Separate*: Keycloak uses its own PostgreSQL (lightweight, required for IAM)
+
+==== Recipe Document Structure (MongoDB)
+
+[source,json]
+----
+{
+  "_id": "ObjectId",
+  "tenant_id": "uuid",
+  "recipe_id": "uuid",           // Business ID for API
+  "version": 3,
+  "status": "published",
+  "name": "Butter Chicken",
+  "tags": ["indian", "curry", "chicken"],
+  "prep_time_seconds": 1800,
+  "cook_time_seconds": 2400,
+  "recipe_steps": [
+  ],
+  "created_at": "ISODate",
+  "updated_at": "ISODate",
+  "created_by": "user-uuid"
+}
+----
+
+=== Data Partitioning Strategy
+
+[mermaid]
+----
+flowchart TB
+    subgraph MVP["MVP: Row-Level Isolation"]
+        MariaDB1["MariaDB\nAll tenants\ntenant_id in every table"]
+        MongoDB1["MongoDB\nAll tenants\ntenant_id in every document"]
+    end
+
+    subgraph Scale["Future: Database per Tenant"]
+        MariaDBE["MariaDB\nEnterprise Tenant A"]
+        MongoDBE["MongoDB\nEnterprise Tenant A"]
+    end
+----
+
+=== Core Entity Relationships
+
+[mermaid]
+----
+erDiagram
+    TENANT ||--o{ REGION : contains
+    TENANT ||--o{ USER : has
+    REGION ||--o{ SITE : contains
+    SITE ||--|| KOS_INSTANCE : has
+    SITE ||--o{ KITCHEN : contains
+
+    USER ||--o{ ROLE_ASSIGNMENT : has
+    ROLE ||--o{ ROLE_ASSIGNMENT : assigned_to
+
+    ORDER }o--|| REGION : placed_in
+    ORDER }o--|| SITE : assigned_to
+    ORDER }o--|| KITCHEN : executed_by
+    ORDER ||--o{ ORDER_ITEM : contains
+
+    AUDIT_LOG }o--|| TENANT : belongs_to
+    AUDIT_LOG }o--|| USER : performed_by
+----
+
+== Integration Architecture
+
+=== API-First Architecture
+
+All communication between KWS and KOS (and external systems) happens via REST APIs. No message brokers required for MVP.
+
+[mermaid]
+----
+flowchart TB
+    subgraph Clients["API Clients"]
+        WebUI["Web UI"]
+        KOS["KOS Instances"]
+        POS["POS Systems"]
+        Mobile["Mobile App"]
+    end
+
+    subgraph KWS["KWS Platform"]
+        Gateway["API Gateway\n(rate limiting, auth)"]
+
+        subgraph Services["Services"]
+            AuthSvc["Auth Service"]
+            RecipeSvc["Recipe Service"]
+            OrderSvc["Order Service"]
+            FleetSvc["Fleet Service"]
+        end
+    end
+
+    WebUI -->|"REST"| Gateway
+    KOS -->|"REST (polling)"| Gateway
+    POS -->|"REST"| Gateway
+    Mobile -->|"REST"| Gateway
+
+    Gateway --> Services
+----
+
+=== KOS Polling Pattern
+
+[mermaid]
+----
+sequenceDiagram
+    participant KOS
+    participant KWS
+
+    loop Every 30 seconds
+        KOS->>KWS: GET /orders?site_id=X&execution_within_minutes=30
+        KWS-->>KOS: Orders list
+
+        alt New orders found
+            KOS->>KOS: Add to local queue
+        end
+    end
+
+    loop Every 5 minutes
+        KOS->>KWS: GET /recipes?site_id=X&updated_since=timestamp
+        KWS-->>KOS: Updated recipes
+
+        alt Recipes updated
+            KOS->>KOS: Update local cache
+        end
+    end
+
+    loop Every 60 seconds
+        KOS->>KWS: POST /kos/heartbeat
+        KWS-->>KOS: 200 OK
+    end
+----
+
+== Security Architecture
+
+=== Security Layers
+
+[mermaid]
+----
+flowchart TB
+    subgraph L1["Layer 1: Transport Security"]
+        TLS["TLS 1.3"]
+    end
+
+    subgraph L2["Layer 2: API Security"]
+        RateLimit["Rate Limiting"]
+        APIKey["API Key Validation"]
+        JWT["JWT Verification"]
+    end
+
+    subgraph L3["Layer 3: Application Security"]
+        Casbin["Casbin RBAC/PBAC"]
+        TenantIso["Tenant Isolation"]
+        InputVal["Input Validation"]
+    end
+
+    subgraph L4["Layer 4: Data Security"]
+        EncRest["Encryption at Rest"]
+        Hashing["Password/Key Hashing"]
+    end
+
+    subgraph L5["Layer 5: Audit"]
+        AuditLog["Comprehensive Audit Logging"]
+    end
+
+    L1 --> L2 --> L3 --> L4 --> L5
+----
+
+=== API Key Security for KOS
+
+[source,go]
+----
+// API key format: kos_{site_id_prefix}_{random_32_chars}
+// Example: kos_downtown_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
+
+type APIKey struct {
+    ID          uuid.UUID
+    TenantID    uuid.UUID
+    SiteID      uuid.UUID
+    KeyHash     string    // bcrypt hash
+    KeyPrefix   string    // For identification: "kos_downtown_a1b2"
+    Permissions []string  // Scoped permissions
+    ExpiresAt   *time.Time
+    CreatedAt   time.Time
+    LastUsedAt  *time.Time
+}
+----
+
+== API Design
+
+=== API Principles
+
+* RESTful design with resource-oriented URLs
+* JSON request/response bodies
+* API versioning via URL path (`/api/v1/`)
+* Pagination for list endpoints
+* Rate limiting with clear headers
+* Consistent error format
+
+=== Complete API Endpoint Catalog
+
+[source]
+----
+/api/v1/
+
+# Authentication
+POST   /auth/login
+POST   /auth/logout
+POST   /auth/refresh
+POST   /auth/mfa/verify
+
+# Users
+GET    /users
+POST   /users
+GET    /users/{user_id}
+PATCH  /users/{user_id}
+DELETE /users/{user_id}
+POST   /users/{user_id}/roles
+
+# Roles & Permissions (Casbin management)
+GET    /roles
+POST   /roles
+GET    /roles/{role_id}
+PATCH  /roles/{role_id}
+DELETE /roles/{role_id}
+GET    /roles/{role_id}/permissions
+POST   /roles/{role_id}/permissions
+
+# Regions
+GET    /regions
+POST   /regions
+GET    /regions/{region_id}
+PATCH  /regions/{region_id}
+DELETE /regions/{region_id}
+GET    /regions/{region_id}/sites
+
+# Sites
+GET    /sites
+POST   /sites
+GET    /sites/{site_id}
+PATCH  /sites/{site_id}
+DELETE /sites/{site_id}
+GET    /sites/{site_id}/kitchens
+
+# Kitchens
+GET    /kitchens
+POST   /kitchens
+GET    /kitchens/{kitchen_id}
+PATCH  /kitchens/{kitchen_id}
+DELETE /kitchens/{kitchen_id}
+
+# KOS Instances
+POST   /kos/register
+GET    /kos/instances
+GET    /kos/instances/{instance_id}
+PATCH  /kos/instances/{instance_id}
+DELETE /kos/instances/{instance_id}
+POST   /kos/heartbeat
+
+# Recipes (served from MongoDB)
+GET    /recipes
+POST   /recipes
+GET    /recipes/{recipe_id}
+PATCH  /recipes/{recipe_id}
+DELETE /recipes/{recipe_id}
+GET    /recipes/{recipe_id}/full          # Complete with steps
+POST   /recipes/{recipe_id}/publish
+POST   /recipes/{recipe_id}/archive
+GET    /recipes/{recipe_id}/versions
+
+# Orders
+GET    /orders
+POST   /orders
+GET    /orders/{order_id}
+PATCH  /orders/{order_id}/status
+POST   /orders/{order_id}/cancel
+GET    /orders/{order_id}/history
+
+# API Keys
+GET    /api-keys
+POST   /api-keys
+DELETE /api-keys/{key_id}
+
+# Analytics
+GET    /analytics/orders/summary
+GET    /analytics/orders/by-region
+GET    /analytics/orders/by-site
+GET    /analytics/recipes/popularity
+
+# Audit
+GET    /audit/logs
+----
+
+=== Standard Response Format
+
+[source,json]
+----
+{
+  "data": { },
+  "meta": {
+    "request_id": "uuid",
+    "timestamp": "2024-12-20T10:30:00Z"
+  },
+  "pagination": {
+    "page": 1,
+    "per_page": 20,
+    "total": 150,
+    "total_pages": 8
+  }
+}
+----
+
+=== Error Response Format
+
+[source,json]
+----
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Region and site are required for order creation",
+    "details": [
+      {
+        "field": "region_id",
+        "message": "This field is required"
+      },
+      {
+        "field": "site_id",
+        "message": "This field is required"
+      }
+    ]
+  },
+  "meta": {
+    "request_id": "uuid",
+    "timestamp": "2024-12-20T10:30:00Z"
+  }
+}
+----
+
+== Deployment & Infrastructure
+
+=== Home Lab Deployment (MVP)
+
+[mermaid]
+----
+flowchart TB
+    subgraph HomeLab["Home Lab Server"]
+        subgraph Docker["Docker Compose"]
+            KWS["KWS API\n(Go binary)"]
+            MariaDB[("MariaDB")]
+            MongoDB[("MongoDB")]
+            Nginx["Nginx\n(reverse proxy)"]
+        end
+    end
+
+    subgraph Sites["Remote Sites"]
+        KOS1["KOS\n(Site 1)"]
+        KOS2["KOS\n(Site 2)"]
+    end
+
+    Internet["Internet\n(with DDNS)"]
+
+    KOS1 --> Internet
+    KOS2 --> Internet
+    Internet --> Nginx
+    Nginx --> KWS
+    KWS --> MariaDB
+    KWS --> MongoDB
+----
+
+=== Infrastructure Requirements (Home Lab)
+
+[cols="1,2,2"]
+|===
+|Component |Minimum Spec |Recommended
+
+|CPU
+|4 cores
+|8 cores
+
+|RAM
+|8 GB
+|16 GB
+
+|Storage
+|100 GB SSD
+|500 GB SSD
+
+|Network
+|100 Mbps upload
+|1 Gbps symmetric
+
+|OS
+|Ubuntu 22.04 LTS
+|Ubuntu 24.04 LTS
+|===
+
+=== Docker Compose Structure
+
+[source,yaml]
+----
+version: '3.8'
+
+services:
+  kws-api:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=mariadb
+      - MONGO_URI=mongodb://mongodb:27017
+    depends_on:
+      - mariadb
+      - mongodb
+
+  mariadb:
+    image: mariadb:10.11
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+      - MYSQL_DATABASE=kws
+
+  mongodb:
+    image: mongo:7.0
+    volumes:
+      - mongodb_data:/data/db
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./certs:/etc/nginx/certs
+
+volumes:
+  mariadb_data:
+  mongodb_data:
+----
+
+=== Production Deployment (Future)
+
+[mermaid]
+----
+flowchart TB
+    LB["Load Balancer"]
+
+    subgraph K8s["Kubernetes Cluster"]
+        API1["KWS API Pod 1"]
+        API2["KWS API Pod 2"]
+        API3["KWS API Pod 3"]
+    end
+
+    subgraph Data["Managed Databases"]
+        MariaDB[("MariaDB\nGalera Cluster")]
+        MongoDB[("MongoDB\nReplica Set")]
+    end
+
+    LB --> API1
+    LB --> API2
+    LB --> API3
+
+    API1 --> MariaDB
+    API1 --> MongoDB
+    API2 --> MariaDB
+    API2 --> MongoDB
+    API3 --> MariaDB
+    API3 --> MongoDB
+----
+
+== Future Considerations
+
+=== Phase 2 Features (Post-MVP)
+
+[cols="1,3,1"]
+|===
+|Feature |Description |Priority
+
+|MQTT for real-time
+|Add MQTT for real-time order status updates (optional)
+|Medium
+
+|Mobile app
+|Native mobile management app
+|Medium
+
+|Advanced analytics
+|ML-powered insights
+|Low
+
+|Multi-language
+|Internationalization
+|Medium
+|===
+
+=== Scalability Roadmap
+
+[cols="1,1,1,1,1"]
+|===
+|Phase |Deployment |Tenants |Sites |Orders/Day
+
+|MVP
+|Home Lab
+|5-10
+|50
+|1,000
+
+|V1.1
+|Single VPS
+|50
+|200
+|10,000
+
+|V2.0
+|Cloud (K8s)
+|200
+|1,000
+|100,000
+|===
+
+== Glossary
+
+[cols="1,3"]
+|===
+|Term |Definition
+
+|KOS
+|Kitchen Operating System - on-premise kitchen automation software (one per site)
+
+|KWS
+|Kitchen Web Service - cloud/home lab management platform
+
+|Tenant
+|Customer organization using KWS
+
+|Region
+|Geographic area containing one or more sites (e.g., Sacramento Metro)
+
+|Site
+|Physical location with one KOS deployment (e.g., Downtown Branch)
+
+|Kitchen
+|Individual cooking station/line managed by KOS (e.g., Main Kitchen, Express Line)
+
+|Recipe
+|Complete set of instructions for preparing a dish (managed in KWS)
+
+|SOP
+|Standard Operating Procedure - defined operational rules
+|===
+
+[appendix]
+== Decision Log
+
+[cols="1,2,1,2"]
+|===
+|Decision |Options Considered |Choice |Rationale
+
+|Recipe Sync
+|Bidirectional sync, KWS-as-source
+|KWS-as-source (SOP-001)
+|Eliminates version conflicts, simpler architecture
+
+|Communication
+|MQTT push, REST polling
+|REST polling
+|Simpler, no broker dependency, reusable API
+
+|Application Database
+|MariaDB+MongoDB hybrid, MongoDB only, PostgreSQL
+|MongoDB only
+|Simpler stack, document model fits all KWS data, KOS remains on MariaDB with API integration
+
+|Keycloak Database
+|PostgreSQL, MariaDB, H2
+|PostgreSQL
+|Lightweight, Keycloak-optimized, separate from application data
+
+|IAM (AuthN + AuthZ)
+|Casbin, OPA, Keycloak, Ory Stack
+|Keycloak
+|Complete IAM solution with built-in Admin UI, supports both authentication and authorization
+
+|Multi-tenancy
+|Custom row-level, schema-per-tenant
+|Custom row-level
+|Simplest for MVP, works with home lab constraints
+
+|API versioning
+|Header, Query param, URL path
+|URL path
+|Industry standard, clearest semantics
+|===
+
+[appendix]
+== Risk Register
+
+[cols="1,1,1,2"]
+|===
+|Risk |Impact |Likelihood |Mitigation
+
+|Tenant data leak
+|Critical
+|Low
+|Row-level isolation, Casbin policies, audit logging
+
+|Home lab downtime
+|High
+|Medium
+|KOS offline operation, local caching
+
+|Recipe sync delays
+|Medium
+|Low
+|Incremental sync, local cache on KOS
+
+|Scaling limits
+|Medium
+|Medium
+|Architecture allows migration to cloud
+
+|MongoDB complexity
+|Low
+|Low
+|Well-defined schema, Go driver maturity
+|===
+
+[appendix]
+== Standard Operating Procedures Summary
+
+[cols="1,3"]
+|===
+|SOP |Description
+
+|SOP-001
+|Recipe Authority: KWS is single source of truth. Recipes created/modified on KWS always override KOS local data. Recipe version increases trigger full re-sync of recipe steps and ingredients.
+
+|SOP-002
+|Order Routing: Every order must specify region and site. Orders without these fields are rejected. Each order contains a single recipe (one recipe per order model).
+
+|SOP-003
+|KOS Identity Management: KOS ID is auto-generated (UUID) on first startup and stored in database. Identity persists across container restarts. mTLS certificates identify KOS instances. No identity in config files.
+|===
+
+== Document Control
+
+[cols="1,1,1,2"]
+|===
+|Version |Date |Author |Changes
+
+|1.0
+|Dec 2024
+|KOS Team
+|Initial draft
+
+|1.1
+|Dec 2024
+|KOS Team
+|Added: Region-Site-Kitchen hierarchy, REST-based recipe/order sync, MariaDB+MongoDB, Casbin RBAC, home lab deployment, SOPs
+
+|1.2
+|Dec 2024
+|KOS Team
+|Changed: Replaced Casbin with Keycloak for complete IAM (AuthN+AuthZ with Admin UI). Updated infrastructure for 8-core/64GB home lab. Added Keycloak realm strategy for multi-tenancy. Switched to MongoDB-only for KWS (KOS stays on MariaDB).
+
+|1.3
+|Dec 2024
+|KOS Team
+|Added: KOS ID persistence in database (survives container restarts), mTLS authentication between KOS and KWS, single recipe per order model, recipe versioning for sync, simplified KWS config (removed kos_id/tenant_id/site_id from config - now stored in database).
+|===
+
+---
+
+_This document is a living specification and will be updated as requirements evolve._

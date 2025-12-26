@@ -1,0 +1,3288 @@
+= KWS (Kitchen Web Service) Technical Design Document
+:author: Arun Chandrasekaran
+:revnumber: 1.0
+:revdate: December 2024
+:status: Draft
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: highlight.js
+
+== Introduction
+
+=== Purpose
+
+This Technical Design Document (TDD) provides the detailed technical architecture, component design, and implementation specifications for the Kitchen Web Service (KWS). It translates the requirements from the KWS Requirements Document into actionable technical specifications.
+
+=== Scope
+
+This document covers:
+
+* System architecture and component design
+* Database schema design for both MariaDB and MongoDB
+* API specifications and contracts
+* Authentication and authorization implementation with Keycloak
+* Integration patterns between KWS and KOS
+* Deployment architecture for home lab and production
+* Security implementation details
+
+=== Audience
+
+* Backend developers implementing KWS
+* DevOps engineers deploying the platform
+* Integration engineers connecting KOS to KWS
+* Security engineers reviewing the implementation
+
+== System Architecture
+
+=== High-Level Architecture
+
+[mermaid]
+----
+flowchart TB
+    subgraph External["External Clients"]
+        WebUI["Web Browser"]
+        KOS["KOS Instances"]
+        POS["POS Systems"]
+        Mobile["Mobile Apps"]
+    end
+
+    subgraph HomeLab["Home Lab (Primary Box)"]
+        subgraph Gateway["API Layer"]
+            Nginx["Nginx\n(Reverse Proxy + TLS)"]
+            RateLimit["Rate Limiter"]
+        end
+
+        subgraph Auth["Identity Layer"]
+            Keycloak["Keycloak\n(IAM)"]
+        end
+
+        subgraph App["Application Layer"]
+            API["KWS API\n(Go)"]
+        end
+
+        subgraph Data["Data Layer"]
+            MongoDB[("MongoDB\n(All Data)")]
+        end
+    end
+
+    subgraph HomeLab2["Home Lab (Secondary Box)"]
+        MongoDBReplica[("MongoDB\nReplica")]
+    end
+
+    WebUI --> Nginx
+    KOS --> Nginx
+    POS --> Nginx
+    Mobile --> Nginx
+
+    Nginx --> RateLimit
+    RateLimit --> API
+    API --> Keycloak
+    API --> MongoDB
+
+    MongoDB -.->|"Replication"| MongoDBReplica
+----
+
+=== Database Strategy: MongoDB Only
+
+==== Rationale for Single Database
+
+After evaluating the data model and code reuse requirements, we recommend using MongoDB as the sole database for KWS:
+
+[cols="1,3"]
+|===
+|Factor |Justification
+
+|*Clean Separation from KOS*
+|KOS retains MariaDB for local operations. KWS uses MongoDB for its data. Communication happens via REST API - KOS polls KWS for recipes/orders and maps responses to its local MariaDB schema. No database coupling.
+
+|*Document-Oriented Data*
+|Recipes, order items, and configurations are inherently hierarchical. MongoDB's document model eliminates the need for complex JOINs.
+
+|*Flexible Schema*
+|Different recipe types, order modifications, and tenant configurations benefit from schema flexibility.
+
+|*Operational Simplicity*
+|One database to manage, backup, and replicate on home lab infrastructure.
+
+|*References for Relationships*
+|MongoDB supports document references (`$lookup`) for tenant→region→site→kitchen hierarchy while maintaining document storage benefits.
+
+|*Keycloak Compatibility*
+|Keycloak can use MongoDB as its database backend (via community extensions) or remain on embedded H2/PostgreSQL for simplicity.
+|===
+
+==== MongoDB vs Hybrid Approach
+
+[cols="1,2,2"]
+|===
+|Aspect |Hybrid (MariaDB + MongoDB) |MongoDB Only
+
+|Complexity
+|Two databases to manage
+|Single database
+
+|Transactions
+|Full ACID in MariaDB
+|Multi-document ACID transactions (MongoDB 4.0+)
+
+|Joins
+|Native SQL JOINs
+|`$lookup` aggregation (less efficient but sufficient)
+
+|Schema
+|Strict for core, flexible for recipes
+|Flexible everywhere, validation via JSON Schema
+
+|KOS Integration
+|KOS maps API responses to MariaDB
+|KOS maps API responses to MariaDB (same approach)
+
+|Home Lab
+|More resources needed
+|Simpler deployment
+|===
+
+=== Component Overview
+
+[cols="1,2,2,1"]
+|===
+|Component |Technology |Responsibility |Port
+
+|Nginx
+|Nginx 1.25+
+|TLS termination, reverse proxy, static files
+|443
+
+|Keycloak
+|Keycloak 23.0+
+|Authentication, authorization, user management
+|8180
+
+|KWS API
+|Go 1.22+
+|Business logic, REST API
+|8080
+
+|MongoDB
+|MongoDB 7.0+
+|All application data (tenants, orders, recipes, etc.)
+|27017
+|===
+
+=== Directory Structure
+
+[source]
+----
+kws/
+├── cmd/
+│   └── kws/
+│       └── main.go              # Application entry point
+├── internal/
+│   ├── app/
+│   │   ├── handlers/            # HTTP handlers
+│   │   │   ├── auth.go
+│   │   │   ├── orders.go
+│   │   │   ├── recipes.go
+│   │   │   ├── regions.go
+│   │   │   ├── sites.go
+│   │   │   └── kos.go
+│   │   ├── services/            # Business logic
+│   │   │   ├── order_service.go
+│   │   │   ├── recipe_service.go
+│   │   │   └── fleet_service.go
+│   │   └── middleware/          # HTTP middleware
+│   │       ├── auth.go
+│   │       ├── tenant.go
+│   │       └── ratelimit.go
+│   ├── domain/
+│   │   ├── models/              # Domain entities
+│   │   │   ├── tenant.go
+│   │   │   ├── region.go
+│   │   │   ├── site.go
+│   │   │   ├── order.go
+│   │   │   └── recipe.go
+│   │   └── repositories/        # Repository interfaces
+│   │       ├── tenant_repo.go
+│   │       ├── order_repo.go
+│   │       └── recipe_repo.go
+│   ├── infrastructure/
+│   │   ├── config/              # Configuration
+│   │   ├── database/            # Database connections
+│   │   │   ├── mariadb.go
+│   │   │   └── mongodb.go
+│   │   ├── keycloak/            # Keycloak integration
+│   │   │   ├── client.go
+│   │   │   └── middleware.go
+│   │   └── http/                # HTTP server setup
+│   └── pkg/
+│       ├── errors/              # Error types
+│       ├── logger/              # Logging
+│       └── validator/           # Input validation
+├── configs/
+│   ├── config.yaml              # Main config
+│   └── keycloak/
+│       └── realm-export.json    # Keycloak realm template
+├── deployments/
+│   ├── docker-compose.yaml
+│   ├── docker-compose.prod.yaml
+│   └── nginx/
+│       └── nginx.conf
+├── docs/
+│   ├── api/
+│   │   └── openapi.yaml
+│   └── dbml/
+│       └── schema.dbml
+├── scripts/
+│   ├── setup-keycloak.sh
+│   └── migrate.sh
+└── go.mod
+----
+
+== Database Design
+
+=== MongoDB Schema Design
+
+All data is stored in MongoDB with document references for relationships. This approach enables code reuse with KOS (which can adopt the same document models for recipes, ingredients, and orders).
+
+==== Collections Overview
+
+[cols="1,2,2"]
+|===
+|Collection |Purpose |Key Indexes
+
+|`tenants`
+|Customer organizations
+|`slug` (unique), `status`
+
+|`regions`
+|Geographic regions
+|`tenant_id` + `code` (unique)
+
+|`sites`
+|Physical locations
+|`region_id` + `code` (unique), `status`
+
+|`kitchens`
+|Cooking stations within sites
+|`site_id` + `code` (unique)
+
+|`kos_instances`
+|KOS device registrations
+|`site_id` (unique), `api_key_prefix` (unique)
+
+|`orders`
+|Customer orders
+|`site_id` + `execution_time`, `status`, `tenant_id`
+
+|`recipes`
+|Recipe definitions with embedded steps
+|`tenant_id` + `recipe_id` (unique), `status`, text search
+
+|`ingredients`
+|Ingredient master data
+|`tenant_id` + `ingredient_id` (unique)
+
+|`audit_logs`
+|Audit trail
+|`tenant_id` + `created_at`, `resource_type` + `resource_id`
+
+|`api_keys`
+|API key storage
+|`key_prefix` (unique), `tenant_id`
+|===
+
+==== Entity Relationship (Document References)
+
+[mermaid]
+----
+erDiagram
+    tenants ||--o{ regions : contains
+    tenants ||--o{ audit_logs : has
+    tenants ||--o{ recipes : owns
+    tenants ||--o{ ingredients : owns
+    regions ||--o{ sites : contains
+    sites ||--|| kos_instances : has
+    sites ||--o{ kitchens : contains
+    sites ||--o{ orders : receives
+
+    tenants {
+        ObjectId _id PK
+        string tenant_id UK "UUID for API"
+        string name
+        string slug UK
+        string status "active,suspended,deleted"
+        string keycloak_realm
+        date created_at
+        date updated_at
+    }
+
+    regions {
+        ObjectId _id PK
+        string region_id UK "UUID for API"
+        ObjectId tenant_ref FK "Reference"
+        string name
+        string code
+        string timezone
+        date created_at
+        date updated_at
+    }
+
+    sites {
+        ObjectId _id PK
+        string site_id UK "UUID for API"
+        ObjectId region_ref FK
+        string name
+        string code
+        object location "GeoJSON point"
+        string address
+        string status
+        date created_at
+        date updated_at
+    }
+
+    kitchens {
+        ObjectId _id PK
+        string kitchen_id UK
+        ObjectId site_ref FK
+        string name
+        string code
+        string kitchen_type
+        string status
+        date created_at
+        date updated_at
+    }
+
+    kos_instances {
+        ObjectId _id PK
+        string instance_id UK
+        ObjectId site_ref FK UK
+        string device_id UK
+        string api_key_prefix UK
+        string api_key_hash
+        string status
+        string version
+        date last_heartbeat
+        object metrics
+        date created_at
+        date updated_at
+    }
+
+    orders {
+        ObjectId _id PK
+        string order_id UK
+        ObjectId tenant_ref FK
+        ObjectId region_ref FK
+        ObjectId site_ref FK
+        ObjectId kitchen_ref FK
+        string external_reference
+        date execution_time
+        string priority
+        string status
+        array items "Embedded"
+        array status_history "Embedded"
+        object customer
+        date created_at
+        date updated_at
+    }
+
+    recipes {
+        ObjectId _id PK
+        string recipe_id UK
+        ObjectId tenant_ref FK
+        string name
+        int version
+        string status
+        array steps "Embedded with ingredients"
+        array site_assignments
+        date created_at
+        date updated_at
+    }
+
+    ingredients {
+        ObjectId _id PK
+        string ingredient_id UK
+        ObjectId tenant_ref FK
+        string name
+        string category
+        array allergens
+        object nutrition
+        date created_at
+        date updated_at
+    }
+----
+
+=== MongoDB Collection Schemas
+
+==== Recipe Collection
+
+[source,javascript]
+----
+// Collection: recipes
+// Database: kws
+
+// Schema validation
+db.createCollection("recipes", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["tenant_id", "recipe_id", "name", "version", "status"],
+      properties: {
+        tenant_id: {
+          bsonType: "string",
+          description: "UUID of the tenant"
+        },
+        recipe_id: {
+          bsonType: "string",
+          description: "Business UUID for API reference"
+        },
+        name: {
+          bsonType: "string",
+          minLength: 1,
+          maxLength: 255
+        },
+        description: {
+          bsonType: "string"
+        },
+        version: {
+          bsonType: "int",
+          minimum: 1
+        },
+        status: {
+          enum: ["draft", "review", "published", "archived"]
+        },
+        category: {
+          bsonType: "string"
+        },
+        tags: {
+          bsonType: "array",
+          items: { bsonType: "string" }
+        },
+        prep_time_seconds: {
+          bsonType: "int",
+          minimum: 0
+        },
+        cook_time_seconds: {
+          bsonType: "int",
+          minimum: 0
+        },
+        servings: {
+          bsonType: "int",
+          minimum: 1
+        },
+        difficulty: {
+          enum: ["easy", "medium", "hard"]
+        },
+        steps: {
+          bsonType: "array",
+          items: {
+            bsonType: "object",
+            required: ["sequence", "instruction"],
+            properties: {
+              sequence: { bsonType: "int" },
+              instruction: { bsonType: "string" },
+              duration_seconds: { bsonType: "int" },
+              equipment_type: { bsonType: "string" },
+              temperature: {
+                bsonType: "object",
+                properties: {
+                  value: { bsonType: "double" },
+                  unit: { enum: ["celsius", "fahrenheit"] }
+                }
+              },
+              ingredients: {
+                bsonType: "array",
+                items: {
+                  bsonType: "object",
+                  required: ["name", "quantity", "unit"],
+                  properties: {
+                    ingredient_id: { bsonType: "string" },
+                    name: { bsonType: "string" },
+                    quantity: { bsonType: "double" },
+                    unit: { bsonType: "string" },
+                    preparation: { bsonType: "string" }
+                  }
+                }
+              },
+              parameters: { bsonType: "object" }
+            }
+          }
+        },
+        nutrition: {
+          bsonType: "object",
+          properties: {
+            calories: { bsonType: "int" },
+            protein_g: { bsonType: "double" },
+            carbs_g: { bsonType: "double" },
+            fat_g: { bsonType: "double" }
+          }
+        },
+        site_assignments: {
+          bsonType: "array",
+          items: {
+            bsonType: "object",
+            required: ["site_id", "assigned_at"],
+            properties: {
+              site_id: { bsonType: "string" },
+              assigned_at: { bsonType: "date" }
+            }
+          }
+        },
+        created_by: { bsonType: "string" },
+        created_at: { bsonType: "date" },
+        updated_at: { bsonType: "date" },
+        published_at: { bsonType: "date" }
+      }
+    }
+  }
+});
+
+// Indexes
+db.recipes.createIndex({ "tenant_id": 1, "recipe_id": 1 }, { unique: true });
+db.recipes.createIndex({ "tenant_id": 1, "status": 1 });
+db.recipes.createIndex({ "tenant_id": 1, "updated_at": -1 });
+db.recipes.createIndex({ "site_assignments.site_id": 1, "status": 1 });
+db.recipes.createIndex({ "tags": 1 });
+db.recipes.createIndex({ "name": "text", "description": "text" });
+----
+
+==== Example Recipe Document
+
+[source,json]
+----
+{
+  "_id": ObjectId("..."),
+  "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+  "recipe_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "name": "Butter Chicken",
+  "description": "Classic Indian butter chicken with creamy tomato sauce",
+  "version": 3,
+  "status": "published",
+  "category": "main_course",
+  "tags": ["indian", "curry", "chicken", "creamy"],
+  "prep_time_seconds": 1800,
+  "cook_time_seconds": 2400,
+  "servings": 4,
+  "difficulty": "medium",
+  "steps": [
+    {
+      "sequence": 1,
+      "instruction": "Marinate chicken with yogurt and spices",
+      "duration_seconds": 300,
+      "ingredients": [
+        {
+          "ingredient_id": "ing-001",
+          "name": "Chicken thighs",
+          "quantity": 500,
+          "unit": "g",
+          "preparation": "cubed"
+        },
+        {
+          "ingredient_id": "ing-002",
+          "name": "Yogurt",
+          "quantity": 100,
+          "unit": "ml"
+        }
+      ],
+      "parameters": {
+        "marination_time_minutes": 30
+      }
+    },
+    {
+      "sequence": 2,
+      "instruction": "Cook marinated chicken in tandoor",
+      "duration_seconds": 600,
+      "equipment_type": "tandoor",
+      "temperature": {
+        "value": 220,
+        "unit": "celsius"
+      }
+    },
+    {
+      "sequence": 3,
+      "instruction": "Prepare butter sauce and combine",
+      "duration_seconds": 900,
+      "equipment_type": "saucepan",
+      "ingredients": [
+        {
+          "name": "Butter",
+          "quantity": 50,
+          "unit": "g"
+        },
+        {
+          "name": "Tomato puree",
+          "quantity": 200,
+          "unit": "ml"
+        },
+        {
+          "name": "Heavy cream",
+          "quantity": 100,
+          "unit": "ml"
+        }
+      ]
+    }
+  ],
+  "nutrition": {
+    "calories": 450,
+    "protein_g": 35.5,
+    "carbs_g": 12.0,
+    "fat_g": 28.0
+  },
+  "site_assignments": [
+    {
+      "site_id": "site-downtown",
+      "assigned_at": ISODate("2024-12-01T00:00:00Z")
+    },
+    {
+      "site_id": "site-midtown",
+      "assigned_at": ISODate("2024-12-15T00:00:00Z")
+    }
+  ],
+  "created_by": "user-chef-123",
+  "created_at": ISODate("2024-11-15T10:30:00Z"),
+  "updated_at": ISODate("2024-12-20T14:00:00Z"),
+  "published_at": ISODate("2024-12-20T14:00:00Z")
+}
+----
+
+==== Ingredients Collection
+
+[source,javascript]
+----
+// Collection: ingredients
+db.createCollection("ingredients", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["tenant_id", "ingredient_id", "name"],
+      properties: {
+        tenant_id: { bsonType: "string" },
+        ingredient_id: { bsonType: "string" },
+        name: { bsonType: "string" },
+        category: { bsonType: "string" },
+        unit_options: {
+          bsonType: "array",
+          items: { bsonType: "string" }
+        },
+        allergens: {
+          bsonType: "array",
+          items: { bsonType: "string" }
+        },
+        nutrition_per_100g: {
+          bsonType: "object"
+        },
+        created_at: { bsonType: "date" },
+        updated_at: { bsonType: "date" }
+      }
+    }
+  }
+});
+
+db.ingredients.createIndex({ "tenant_id": 1, "ingredient_id": 1 }, { unique: true });
+db.ingredients.createIndex({ "tenant_id": 1, "name": 1 });
+----
+
+==== Tenants Collection
+
+[source,javascript]
+----
+// Collection: tenants
+db.createCollection("tenants", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["tenant_id", "name", "slug", "status", "keycloak_realm"],
+      properties: {
+        tenant_id: { bsonType: "string", description: "UUID for API" },
+        name: { bsonType: "string" },
+        slug: { bsonType: "string" },
+        status: { enum: ["active", "suspended", "deleted"] },
+        keycloak_realm: { bsonType: "string" },
+        settings: { bsonType: "object" },
+        billing: { bsonType: "object" },
+        created_at: { bsonType: "date" },
+        updated_at: { bsonType: "date" }
+      }
+    }
+  }
+});
+
+db.tenants.createIndex({ "tenant_id": 1 }, { unique: true });
+db.tenants.createIndex({ "slug": 1 }, { unique: true });
+db.tenants.createIndex({ "status": 1 });
+----
+
+==== Regions Collection
+
+[source,javascript]
+----
+// Collection: regions
+db.createCollection("regions", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["region_id", "tenant_id", "name", "code"],
+      properties: {
+        region_id: { bsonType: "string" },
+        tenant_id: { bsonType: "string" },
+        name: { bsonType: "string" },
+        code: { bsonType: "string" },
+        timezone: { bsonType: "string" },
+        created_at: { bsonType: "date" },
+        updated_at: { bsonType: "date" }
+      }
+    }
+  }
+});
+
+db.regions.createIndex({ "region_id": 1 }, { unique: true });
+db.regions.createIndex({ "tenant_id": 1, "code": 1 }, { unique: true });
+db.regions.createIndex({ "tenant_id": 1 });
+----
+
+==== Sites Collection
+
+[source,javascript]
+----
+// Collection: sites
+db.createCollection("sites", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["site_id", "region_id", "tenant_id", "name", "code"],
+      properties: {
+        site_id: { bsonType: "string" },
+        region_id: { bsonType: "string" },
+        tenant_id: { bsonType: "string" },  // Denormalized for query efficiency
+        name: { bsonType: "string" },
+        code: { bsonType: "string" },
+        address: { bsonType: "string" },
+        location: {
+          bsonType: "object",
+          properties: {
+            type: { enum: ["Point"] },
+            coordinates: { bsonType: "array" }  // [longitude, latitude]
+          }
+        },
+        status: { enum: ["active", "inactive"] },
+        created_at: { bsonType: "date" },
+        updated_at: { bsonType: "date" }
+      }
+    }
+  }
+});
+
+db.sites.createIndex({ "site_id": 1 }, { unique: true });
+db.sites.createIndex({ "region_id": 1, "code": 1 }, { unique: true });
+db.sites.createIndex({ "tenant_id": 1 });
+db.sites.createIndex({ "status": 1 });
+db.sites.createIndex({ "location": "2dsphere" });  // Geospatial queries
+----
+
+==== Kitchens Collection
+
+[source,javascript]
+----
+// Collection: kitchens
+db.createCollection("kitchens", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["kitchen_id", "site_id", "name", "code"],
+      properties: {
+        kitchen_id: { bsonType: "string" },
+        site_id: { bsonType: "string" },
+        tenant_id: { bsonType: "string" },  // Denormalized
+        name: { bsonType: "string" },
+        code: { bsonType: "string" },
+        kitchen_type: { enum: ["main", "express", "catering"] },
+        status: { enum: ["active", "inactive"] },
+        created_at: { bsonType: "date" },
+        updated_at: { bsonType: "date" }
+      }
+    }
+  }
+});
+
+db.kitchens.createIndex({ "kitchen_id": 1 }, { unique: true });
+db.kitchens.createIndex({ "site_id": 1, "code": 1 }, { unique: true });
+db.kitchens.createIndex({ "site_id": 1 });
+----
+
+==== KOS Instances Collection
+
+[source,javascript]
+----
+// Collection: kos_instances
+db.createCollection("kos_instances", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["instance_id", "site_id", "device_id", "api_key_prefix", "api_key_hash"],
+      properties: {
+        instance_id: { bsonType: "string" },
+        site_id: { bsonType: "string" },
+        tenant_id: { bsonType: "string" },  // Denormalized
+        device_id: { bsonType: "string" },
+        api_key_prefix: { bsonType: "string" },
+        api_key_hash: { bsonType: "string" },
+        status: { enum: ["online", "offline", "degraded"] },
+        version: { bsonType: "string" },
+        last_heartbeat: { bsonType: "date" },
+        metrics: { bsonType: "object" },
+        created_at: { bsonType: "date" },
+        updated_at: { bsonType: "date" }
+      }
+    }
+  }
+});
+
+db.kos_instances.createIndex({ "instance_id": 1 }, { unique: true });
+db.kos_instances.createIndex({ "site_id": 1 }, { unique: true });
+db.kos_instances.createIndex({ "device_id": 1 }, { unique: true });
+db.kos_instances.createIndex({ "api_key_prefix": 1 }, { unique: true });
+db.kos_instances.createIndex({ "status": 1 });
+----
+
+==== Orders Collection
+
+[source,javascript]
+----
+// Collection: orders
+db.createCollection("orders", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["order_id", "tenant_id", "region_id", "site_id", "execution_time", "status"],
+      properties: {
+        order_id: { bsonType: "string" },
+        tenant_id: { bsonType: "string" },
+        region_id: { bsonType: "string" },
+        site_id: { bsonType: "string" },
+        kitchen_id: { bsonType: "string" },
+        external_reference: { bsonType: "string" },
+        execution_time: { bsonType: "date" },
+        priority: { enum: ["low", "normal", "high", "urgent"] },
+        status: { enum: ["pending", "accepted", "in_progress", "completed", "failed", "cancelled"] },
+        items: {
+          bsonType: "array",
+          items: {
+            bsonType: "object",
+            required: ["recipe_id", "quantity"],
+            properties: {
+              item_id: { bsonType: "string" },
+              recipe_id: { bsonType: "string" },
+              recipe_name: { bsonType: "string" },
+              quantity: { bsonType: "int" },
+              modifications: { bsonType: "array" }
+            }
+          }
+        },
+        status_history: {
+          bsonType: "array",
+          items: {
+            bsonType: "object",
+            properties: {
+              status: { bsonType: "string" },
+              notes: { bsonType: "string" },
+              changed_by: { bsonType: "string" },
+              created_at: { bsonType: "date" }
+            }
+          }
+        },
+        customer: {
+          bsonType: "object",
+          properties: {
+            name: { bsonType: "string" },
+            order_reference: { bsonType: "string" }
+          }
+        },
+        created_at: { bsonType: "date" },
+        updated_at: { bsonType: "date" }
+      }
+    }
+  }
+});
+
+db.orders.createIndex({ "order_id": 1 }, { unique: true });
+db.orders.createIndex({ "tenant_id": 1 });
+db.orders.createIndex({ "site_id": 1, "execution_time": 1 });
+db.orders.createIndex({ "site_id": 1, "status": 1 });
+db.orders.createIndex({ "status": 1 });
+db.orders.createIndex({ "execution_time": 1 });
+db.orders.createIndex({ "external_reference": 1 });
+----
+
+==== API Keys Collection
+
+[source,javascript]
+----
+// Collection: api_keys
+db.createCollection("api_keys", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["key_id", "tenant_id", "key_prefix", "key_hash", "scopes"],
+      properties: {
+        key_id: { bsonType: "string" },
+        tenant_id: { bsonType: "string" },
+        site_id: { bsonType: "string" },
+        name: { bsonType: "string" },
+        key_prefix: { bsonType: "string" },
+        key_hash: { bsonType: "string" },
+        scopes: { bsonType: "array" },
+        expires_at: { bsonType: "date" },
+        last_used_at: { bsonType: "date" },
+        created_at: { bsonType: "date" },
+        revoked_at: { bsonType: "date" }
+      }
+    }
+  }
+});
+
+db.api_keys.createIndex({ "key_id": 1 }, { unique: true });
+db.api_keys.createIndex({ "key_prefix": 1 }, { unique: true });
+db.api_keys.createIndex({ "tenant_id": 1 });
+----
+
+==== Audit Logs Collection
+
+[source,javascript]
+----
+// Collection: audit_logs
+db.createCollection("audit_logs", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["log_id", "tenant_id", "action", "resource_type"],
+      properties: {
+        log_id: { bsonType: "string" },
+        tenant_id: { bsonType: "string" },
+        user_id: { bsonType: "string" },
+        action: { bsonType: "string" },
+        resource_type: { bsonType: "string" },
+        resource_id: { bsonType: "string" },
+        old_value: { bsonType: "object" },
+        new_value: { bsonType: "object" },
+        ip_address: { bsonType: "string" },
+        created_at: { bsonType: "date" }
+      }
+    }
+  }
+});
+
+db.audit_logs.createIndex({ "tenant_id": 1, "created_at": -1 });
+db.audit_logs.createIndex({ "resource_type": 1, "resource_id": 1 });
+// TTL index to auto-delete old logs after 90 days
+db.audit_logs.createIndex({ "created_at": 1 }, { expireAfterSeconds: 7776000 });
+----
+
+== API Design
+
+=== OpenAPI Specification
+
+The full OpenAPI 3.0 specification is maintained in `docs/api/openapi.yaml`. Key endpoints are documented below.
+
+=== Authentication Endpoints
+
+==== Login Flow (via Keycloak)
+
+[source]
+----
+# Step 1: Redirect to Keycloak login
+GET /auth/login?redirect_uri={callback_url}
+Response: 302 Redirect to Keycloak
+
+# Step 2: Keycloak callback
+GET /auth/callback?code={auth_code}&state={state}
+Response: 200 OK
+{
+  "access_token": "eyJhbGciOiJS...",
+  "refresh_token": "eyJhbGciOiJS...",
+  "expires_in": 900,
+  "token_type": "Bearer"
+}
+
+# Step 3: Refresh token
+POST /auth/refresh
+Authorization: Bearer {refresh_token}
+Response: 200 OK
+{
+  "access_token": "eyJhbGciOiJS...",
+  "expires_in": 900
+}
+
+# Logout
+POST /auth/logout
+Authorization: Bearer {access_token}
+Response: 204 No Content
+----
+
+=== KOS Instance Endpoints
+
+==== Register KOS Instance
+
+[source]
+----
+POST /api/v1/kos/register
+Authorization: Bearer {admin_token}
+Content-Type: application/json
+
+{
+  "site_id": "uuid",
+  "device_id": "kos-downtown-001",
+  "version": "1.2.0"
+}
+
+Response: 201 Created
+{
+  "data": {
+    "instance_id": "uuid",
+    "api_key": "kos_downtown_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0",
+    "site": {
+      "id": "uuid",
+      "name": "Downtown",
+      "region": {
+        "id": "uuid",
+        "name": "Sacramento"
+      }
+    }
+  },
+  "meta": {
+    "request_id": "uuid",
+    "timestamp": "2024-12-20T10:30:00Z"
+  }
+}
+
+Note: api_key is only returned once during registration
+----
+
+==== KOS Heartbeat
+
+[source]
+----
+POST /api/v1/kos/heartbeat
+Authorization: Bearer {api_key}
+Content-Type: application/json
+
+{
+  "status": "healthy",
+  "version": "1.2.0",
+  "kitchens": [
+    {
+      "kitchen_id": "uuid",
+      "status": "active",
+      "active_orders": 3,
+      "devices_online": 5,
+      "devices_total": 6
+    }
+  ],
+  "metrics": {
+    "cpu_percent": 45.2,
+    "memory_percent": 62.1,
+    "disk_percent": 30.5,
+    "orders_completed_today": 127
+  }
+}
+
+Response: 200 OK
+{
+  "data": {
+    "acknowledged": true,
+    "server_time": "2024-12-20T10:30:00Z",
+    "config_version": "1.0.0"
+  }
+}
+----
+
+=== Order Endpoints
+
+==== Create Order
+
+[source]
+----
+POST /api/v1/orders
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "region_id": "uuid",              // Required
+  "site_id": "uuid",                // Required
+  "kitchen_id": "uuid",             // Optional
+  "execution_time": "2024-12-20T14:30:00Z",
+  "priority": "normal",
+  "items": [
+    {
+      "recipe_id": "uuid",
+      "quantity": 2,
+      "modifications": [
+        {"type": "exclude", "ingredient": "onion"}
+      ]
+    }
+  ],
+  "customer": {
+    "name": "John Doe",
+    "order_reference": "POS-12345"
+  }
+}
+
+Response: 201 Created
+{
+  "data": {
+    "id": "uuid",
+    "status": "pending",
+    "execution_time": "2024-12-20T14:30:00Z",
+    "estimated_ready_time": "2024-12-20T15:00:00Z"
+  }
+}
+----
+
+==== Poll Orders (for KOS)
+
+[source]
+----
+GET /api/v1/orders?site_id={site_id}&execution_within_minutes=30&status=pending,accepted
+Authorization: Bearer {api_key}
+
+Response: 200 OK
+{
+  "data": [
+    {
+      "id": "uuid",
+      "external_reference": "POS-12345",
+      "execution_time": "2024-12-20T14:30:00Z",
+      "priority": "normal",
+      "status": "pending",
+      "kitchen_id": "uuid",
+      "items": [
+        {
+          "id": "uuid",
+          "recipe_id": "uuid",
+          "recipe_name": "Butter Chicken",
+          "quantity": 2,
+          "modifications": []
+        }
+      ],
+      "customer": {
+        "name": "John Doe"
+      }
+    }
+  ],
+  "meta": {
+    "request_id": "uuid",
+    "timestamp": "2024-12-20T14:00:00Z"
+  },
+  "pagination": {
+    "page": 1,
+    "per_page": 50,
+    "total": 5
+  }
+}
+----
+
+==== Update Order Status (from KOS)
+
+[source]
+----
+PATCH /api/v1/orders/{order_id}/status
+Authorization: Bearer {api_key}
+Content-Type: application/json
+
+{
+  "status": "in_progress",
+  "notes": "Started cooking"
+}
+
+Response: 200 OK
+{
+  "data": {
+    "id": "uuid",
+    "status": "in_progress",
+    "updated_at": "2024-12-20T14:35:00Z"
+  }
+}
+----
+
+=== Recipe Endpoints
+
+==== List Recipes (for KOS sync)
+
+[source]
+----
+GET /api/v1/recipes?site_id={site_id}&status=published&updated_since=2024-12-01T00:00:00Z
+Authorization: Bearer {api_key}
+
+Response: 200 OK
+{
+  "data": [
+    {
+      "recipe_id": "uuid",
+      "name": "Butter Chicken",
+      "version": 3,
+      "updated_at": "2024-12-20T10:00:00Z"
+    }
+  ],
+  "meta": {
+    "sync_timestamp": "2024-12-20T14:00:00Z"
+  }
+}
+----
+
+==== Get Full Recipe
+
+[source]
+----
+GET /api/v1/recipes/{recipe_id}/full
+Authorization: Bearer {api_key}
+
+Response: 200 OK
+{
+  "data": {
+    "recipe_id": "uuid",
+    "name": "Butter Chicken",
+    "version": 3,
+    "status": "published",
+    "prep_time_seconds": 1800,
+    "cook_time_seconds": 2400,
+    "steps": [
+      {
+        "sequence": 1,
+        "instruction": "Marinate chicken...",
+        "duration_seconds": 300,
+        "ingredients": [...]
+      }
+    ]
+  }
+}
+----
+
+== Keycloak Integration
+
+=== Realm Configuration
+
+Each tenant maps to a Keycloak realm. The realm is created during tenant onboarding.
+
+==== Tenant Realm Template
+
+[source,json]
+----
+{
+  "realm": "tenant-${tenant_slug}",
+  "enabled": true,
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 5,
+  "sslRequired": "external",
+  "defaultSignatureAlgorithm": "RS256",
+  "accessTokenLifespan": 900,
+  "refreshTokenMaxReuse": 0,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "roles": {
+    "realm": [
+      {"name": "tenant_owner", "composite": true, "composites": {"realm": ["tenant_admin"]}},
+      {"name": "tenant_admin", "composite": true, "composites": {"realm": ["regional_manager", "recipe_manager", "analytics_viewer"]}},
+      {"name": "regional_manager", "composite": true, "composites": {"realm": ["site_manager"]}},
+      {"name": "site_manager", "composite": true, "composites": {"realm": ["kitchen_operator"]}},
+      {"name": "kitchen_operator"},
+      {"name": "recipe_manager", "composite": true, "composites": {"realm": ["recipe_editor"]}},
+      {"name": "recipe_editor"},
+      {"name": "analytics_viewer"}
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "kws-web",
+      "enabled": true,
+      "publicClient": true,
+      "redirectUris": ["https://kws.example.com/*"],
+      "webOrigins": ["https://kws.example.com"],
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false
+    },
+    {
+      "clientId": "kws-api",
+      "enabled": true,
+      "publicClient": false,
+      "serviceAccountsEnabled": true,
+      "authorizationServicesEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true
+    }
+  ]
+}
+----
+
+=== User Attribute Mapping
+
+Custom user attributes for geographic scope:
+
+[cols="1,2,2"]
+|===
+|Attribute |Description |Example
+
+|`assigned_regions`
+|List of region IDs user can access
+|`["region-sacramento", "region-fremont"]`
+
+|`assigned_sites`
+|List of site IDs user can access
+|`["site-downtown", "site-midtown"]`
+
+|`tenant_id`
+|Tenant UUID (for token claims)
+|`550e8400-e29b-41d4-a716-446655440000`
+|===
+
+=== Token Claims Mapper
+
+Configure Keycloak to include custom claims in JWT:
+
+[source,json]
+----
+{
+  "name": "tenant_id",
+  "protocol": "openid-connect",
+  "protocolMapper": "oidc-usermodel-attribute-mapper",
+  "config": {
+    "user.attribute": "tenant_id",
+    "claim.name": "tenant_id",
+    "jsonType.label": "String",
+    "id.token.claim": "true",
+    "access.token.claim": "true"
+  }
+}
+----
+
+== KOS Integration
+
+=== KOS Changes Required
+
+To integrate with KWS, the existing KOS system requires the following modifications:
+
+==== Database Schema Changes
+
+Add `region_id` and `site_id` to relevant tables in KOS:
+
+[source,sql]
+----
+-- Update 001_initial_schema.sql and 002_additional_tables.sql
+
+-- Add to orders table
+ALTER TABLE orders
+    ADD COLUMN region_id CHAR(36) AFTER id,
+    ADD COLUMN site_id CHAR(36) AFTER region_id;
+
+-- Add to devices table (for identification)
+ALTER TABLE devices
+    ADD COLUMN site_id CHAR(36);
+
+-- Add to tasks table
+ALTER TABLE tasks
+    ADD COLUMN region_id CHAR(36),
+    ADD COLUMN site_id CHAR(36);
+
+-- Configuration table for KWS connection
+CREATE TABLE kws_config (
+    id CHAR(36) NOT NULL PRIMARY KEY,
+    kws_url VARCHAR(255) NOT NULL,
+    api_key_encrypted BLOB NOT NULL,
+    site_id CHAR(36) NOT NULL,
+    region_id CHAR(36) NOT NULL,
+    sync_interval_seconds INT NOT NULL DEFAULT 30,
+    last_recipe_sync DATETIME,
+    last_order_poll DATETIME,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+----
+
+==== KWS Client Module
+
+New module in KOS for KWS communication:
+
+[source,go]
+----
+// internal/infrastructure/kws/client.go
+package kws
+
+import (
+    "context"
+    "encoding/json"
+    "net/http"
+    "time"
+)
+
+type Client struct {
+    baseURL    string
+    apiKey     string
+    siteID     string
+    regionID   string
+    httpClient *http.Client
+}
+
+type Config struct {
+    BaseURL     string
+    APIKey      string
+    SiteID      string
+    RegionID    string
+    Timeout     time.Duration
+}
+
+func NewClient(cfg Config) *Client {
+    return &Client{
+        baseURL:  cfg.BaseURL,
+        apiKey:   cfg.APIKey,
+        siteID:   cfg.SiteID,
+        regionID: cfg.RegionID,
+        httpClient: &http.Client{
+            Timeout: cfg.Timeout,
+        },
+    }
+}
+
+// PollOrders fetches orders that need execution within the next 30 minutes
+func (c *Client) PollOrders(ctx context.Context) ([]Order, error) {
+    url := fmt.Sprintf("%s/api/v1/orders?site_id=%s&execution_within_minutes=30&status=pending,accepted",
+        c.baseURL, c.siteID)
+
+    req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+    if err != nil {
+        return nil, err
+    }
+    req.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+    resp, err := c.httpClient.Do(req)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+
+    var result OrdersResponse
+    if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+        return nil, err
+    }
+
+    return result.Data, nil
+}
+
+// UpdateOrderStatus reports order status back to KWS
+func (c *Client) UpdateOrderStatus(ctx context.Context, orderID, status, notes string) error {
+    url := fmt.Sprintf("%s/api/v1/orders/%s/status", c.baseURL, orderID)
+
+    payload := map[string]string{
+        "status": status,
+        "notes":  notes,
+    }
+    body, _ := json.Marshal(payload)
+
+    req, err := http.NewRequestWithContext(ctx, "PATCH", url, bytes.NewReader(body))
+    if err != nil {
+        return err
+    }
+    req.Header.Set("Authorization", "Bearer "+c.apiKey)
+    req.Header.Set("Content-Type", "application/json")
+
+    resp, err := c.httpClient.Do(req)
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode != http.StatusOK {
+        return fmt.Errorf("failed to update order status: %d", resp.StatusCode)
+    }
+
+    return nil
+}
+
+// SyncRecipes fetches updated recipes from KWS
+func (c *Client) SyncRecipes(ctx context.Context, since time.Time) ([]Recipe, error) {
+    url := fmt.Sprintf("%s/api/v1/recipes?site_id=%s&status=published",
+        c.baseURL, c.siteID)
+
+    if !since.IsZero() {
+        url += "&updated_since=" + since.Format(time.RFC3339)
+    }
+
+    req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+    if err != nil {
+        return nil, err
+    }
+    req.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+    resp, err := c.httpClient.Do(req)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+
+    var result RecipesResponse
+    if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+        return nil, err
+    }
+
+    return result.Data, nil
+}
+
+// SendHeartbeat reports KOS instance health to KWS
+func (c *Client) SendHeartbeat(ctx context.Context, status HealthStatus) error {
+    url := fmt.Sprintf("%s/api/v1/kos/heartbeat", c.baseURL)
+
+    body, _ := json.Marshal(status)
+
+    req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+    if err != nil {
+        return err
+    }
+    req.Header.Set("Authorization", "Bearer "+c.apiKey)
+    req.Header.Set("Content-Type", "application/json")
+
+    resp, err := c.httpClient.Do(req)
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+
+    return nil
+}
+----
+
+==== Background Sync Service
+
+[source,go]
+----
+// internal/app/kws_sync_service.go
+package app
+
+import (
+    "context"
+    "time"
+
+    "github.com/ak/kos/internal/infrastructure/kws"
+    "github.com/ak/kos/internal/pkg/logger"
+)
+
+type KWSSyncService struct {
+    client        *kws.Client
+    orderRepo     OrderRepository
+    recipeRepo    RecipeRepository
+    logger        *logger.Logger
+    pollInterval  time.Duration
+    recipeInterval time.Duration
+}
+
+func (s *KWSSyncService) Start(ctx context.Context) {
+    // Order polling - every 30 seconds
+    orderTicker := time.NewTicker(s.pollInterval)
+    // Recipe sync - every 5 minutes
+    recipeTicker := time.NewTicker(s.recipeInterval)
+    // Heartbeat - every 60 seconds
+    heartbeatTicker := time.NewTicker(60 * time.Second)
+
+    go func() {
+        for {
+            select {
+            case <-ctx.Done():
+                return
+            case <-orderTicker.C:
+                s.pollOrders(ctx)
+            case <-recipeTicker.C:
+                s.syncRecipes(ctx)
+            case <-heartbeatTicker.C:
+                s.sendHeartbeat(ctx)
+            }
+        }
+    }()
+}
+
+func (s *KWSSyncService) pollOrders(ctx context.Context) {
+    orders, err := s.client.PollOrders(ctx)
+    if err != nil {
+        s.logger.Error("Failed to poll orders from KWS", "error", err)
+        return
+    }
+
+    for _, order := range orders {
+        // Check if order already exists locally
+        existing, _ := s.orderRepo.FindByExternalID(ctx, order.ID)
+        if existing != nil {
+            continue
+        }
+
+        // Create local order
+        if err := s.orderRepo.Create(ctx, mapKWSOrderToLocal(order)); err != nil {
+            s.logger.Error("Failed to create local order", "order_id", order.ID, "error", err)
+            continue
+        }
+
+        // Acknowledge receipt to KWS
+        s.client.UpdateOrderStatus(ctx, order.ID, "accepted", "Order received by KOS")
+    }
+}
+
+func (s *KWSSyncService) syncRecipes(ctx context.Context) {
+    lastSync := s.getLastRecipeSync()
+
+    recipes, err := s.client.SyncRecipes(ctx, lastSync)
+    if err != nil {
+        s.logger.Error("Failed to sync recipes from KWS", "error", err)
+        return
+    }
+
+    for _, recipe := range recipes {
+        // Fetch full recipe details
+        fullRecipe, err := s.client.GetRecipeFull(ctx, recipe.RecipeID)
+        if err != nil {
+            s.logger.Error("Failed to fetch full recipe", "recipe_id", recipe.RecipeID, "error", err)
+            continue
+        }
+
+        // Upsert to local cache
+        if err := s.recipeRepo.Upsert(ctx, mapKWSRecipeToLocal(fullRecipe)); err != nil {
+            s.logger.Error("Failed to upsert recipe", "recipe_id", recipe.RecipeID, "error", err)
+        }
+    }
+
+    s.updateLastRecipeSync(time.Now())
+}
+----
+
+== Deployment
+
+=== Docker Compose (Home Lab)
+
+KWS uses MongoDB for all application data. Keycloak requires a relational database, so we use PostgreSQL for Keycloak only (it's more lightweight than MariaDB for single-service use).
+
+[source,yaml]
+----
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:1.25-alpine
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./deployments/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - kws-api
+      - keycloak
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0
+    command: start --db=postgres --hostname-strict=false
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_PROXY: edge
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_URL: https://auth.${DOMAIN}
+      KC_HOSTNAME_ADMIN_URL: https://auth.${DOMAIN}
+    ports:
+      - "8180:8080"
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    restart: unless-stopped
+
+  # PostgreSQL for Keycloak only (Keycloak requires relational DB)
+  keycloak-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  kws-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      KWS_MONGODB_URI: mongodb://mongodb:27017/kws
+      KWS_KEYCLOAK_URL: http://keycloak:8080
+      KWS_KEYCLOAK_REALM: master
+      KWS_LOG_LEVEL: info
+    ports:
+      - "8080:8080"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    restart: unless-stopped
+
+  # MongoDB for all KWS application data
+  mongodb:
+    image: mongo:7.0
+    environment:
+      MONGO_INITDB_DATABASE: kws
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/init-mongo.js:/docker-entrypoint-initdb.d/init.js:ro
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  keycloak_db_data:   # PostgreSQL for Keycloak
+  mongodb_data:       # MongoDB for KWS
+
+networks:
+  default:
+    name: kws-network
+----
+
+=== Nginx Configuration
+
+[source,nginx]
+----
+# deployments/nginx/nginx.conf
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    upstream kws_api {
+        server kws-api:8080;
+    }
+
+    upstream keycloak {
+        server keycloak:8080;
+    }
+
+    # Rate limiting
+    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=100r/s;
+    limit_req_zone $binary_remote_addr zone=auth_limit:10m rate=10r/s;
+
+    # Redirect HTTP to HTTPS
+    server {
+        listen 80;
+        server_name _;
+        return 301 https://$host$request_uri;
+    }
+
+    # KWS API
+    server {
+        listen 443 ssl http2;
+        server_name kws.example.com;
+
+        ssl_certificate /etc/nginx/certs/fullchain.pem;
+        ssl_certificate_key /etc/nginx/certs/privkey.pem;
+        ssl_protocols TLSv1.3 TLSv1.2;
+        ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+        ssl_prefer_server_ciphers off;
+
+        # Security headers
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+        location /api/ {
+            limit_req zone=api_limit burst=50 nodelay;
+
+            proxy_pass http://kws_api;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location / {
+            proxy_pass http://kws_api;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+    }
+
+    # Keycloak
+    server {
+        listen 443 ssl http2;
+        server_name auth.example.com;
+
+        ssl_certificate /etc/nginx/certs/fullchain.pem;
+        ssl_certificate_key /etc/nginx/certs/privkey.pem;
+        ssl_protocols TLSv1.3 TLSv1.2;
+
+        location / {
+            limit_req zone=auth_limit burst=20 nodelay;
+
+            proxy_pass http://keycloak;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            # Required for Keycloak
+            proxy_buffer_size 128k;
+            proxy_buffers 4 256k;
+            proxy_busy_buffers_size 256k;
+        }
+    }
+}
+----
+
+== Security Implementation
+
+=== API Key Generation
+
+[source,go]
+----
+package auth
+
+import (
+    "crypto/rand"
+    "encoding/base64"
+    "fmt"
+    "strings"
+
+    "golang.org/x/crypto/bcrypt"
+)
+
+const (
+    APIKeyLength = 32
+    APIKeyPrefix = "kos"
+)
+
+type APIKeyGenerator struct{}
+
+// GenerateAPIKey creates a new API key for a KOS instance
+// Returns: full key (for one-time display), prefix (for lookup), hash (for storage)
+func (g *APIKeyGenerator) GenerateAPIKey(siteCode string) (fullKey, prefix, hash string, err error) {
+    // Generate random bytes
+    randomBytes := make([]byte, APIKeyLength)
+    if _, err := rand.Read(randomBytes); err != nil {
+        return "", "", "", fmt.Errorf("failed to generate random bytes: %w", err)
+    }
+
+    // Encode to base64 and clean up
+    randomPart := base64.RawURLEncoding.EncodeToString(randomBytes)
+
+    // Create full key: kos_{site_code}_{random}
+    siteCodeClean := strings.ToLower(strings.ReplaceAll(siteCode, "-", ""))
+    fullKey = fmt.Sprintf("%s_%s_%s", APIKeyPrefix, siteCodeClean[:min(8, len(siteCodeClean))], randomPart)
+
+    // Prefix for identification (first 20 chars)
+    prefix = fullKey[:20]
+
+    // Hash for storage
+    hashBytes, err := bcrypt.GenerateFromPassword([]byte(fullKey), bcrypt.DefaultCost)
+    if err != nil {
+        return "", "", "", fmt.Errorf("failed to hash API key: %w", err)
+    }
+    hash = string(hashBytes)
+
+    return fullKey, prefix, hash, nil
+}
+
+// ValidateAPIKey checks if the provided key matches the stored hash
+func (g *APIKeyGenerator) ValidateAPIKey(providedKey, storedHash string) bool {
+    err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(providedKey))
+    return err == nil
+}
+----
+
+=== Tenant Isolation Middleware
+
+[source,go]
+----
+package middleware
+
+import (
+    "context"
+    "net/http"
+
+    "github.com/ak/kws/internal/pkg/errors"
+)
+
+type contextKey string
+
+const (
+    TenantIDKey contextKey = "tenant_id"
+    UserIDKey   contextKey = "user_id"
+    RolesKey    contextKey = "roles"
+)
+
+// TenantIsolation ensures all requests are scoped to a specific tenant
+func TenantIsolation(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        tenantID := r.Context().Value(TenantIDKey)
+        if tenantID == nil || tenantID == "" {
+            errors.WriteError(w, http.StatusForbidden, "TENANT_REQUIRED", "Tenant context is required")
+            return
+        }
+
+        next.ServeHTTP(w, r)
+    })
+}
+
+// GetTenantID extracts tenant ID from context
+func GetTenantID(ctx context.Context) string {
+    if v := ctx.Value(TenantIDKey); v != nil {
+        return v.(string)
+    }
+    return ""
+}
+
+// WithTenantID adds tenant ID to context
+func WithTenantID(ctx context.Context, tenantID string) context.Context {
+    return context.WithValue(ctx, TenantIDKey, tenantID)
+}
+----
+
+=== Audit Logging
+
+[source,go]
+----
+package audit
+
+import (
+    "context"
+    "encoding/json"
+
+    "github.com/ak/kws/internal/domain/models"
+    "github.com/ak/kws/internal/infrastructure/database"
+)
+
+type AuditLogger struct {
+    db *database.MariaDB
+}
+
+type AuditEvent struct {
+    TenantID     string
+    UserID       string
+    Action       string
+    ResourceType string
+    ResourceID   string
+    OldValue     interface{}
+    NewValue     interface{}
+    IPAddress    string
+}
+
+func (l *AuditLogger) Log(ctx context.Context, event AuditEvent) error {
+    oldValueJSON, _ := json.Marshal(event.OldValue)
+    newValueJSON, _ := json.Marshal(event.NewValue)
+
+    log := &models.AuditLog{
+        TenantID:     event.TenantID,
+        UserID:       event.UserID,
+        Action:       event.Action,
+        ResourceType: event.ResourceType,
+        ResourceID:   event.ResourceID,
+        OldValue:     string(oldValueJSON),
+        NewValue:     string(newValueJSON),
+        IPAddress:    event.IPAddress,
+    }
+
+    return l.db.Create(log).Error
+}
+
+// Common audit actions
+const (
+    ActionCreate   = "create"
+    ActionUpdate   = "update"
+    ActionDelete   = "delete"
+    ActionLogin    = "login"
+    ActionLogout   = "logout"
+    ActionAPICall  = "api_call"
+)
+----
+
+=== KOS Device Authentication (mTLS + JWT)
+
+KOS devices authenticate to KWS using a dual-layer security model that combines mutual TLS (mTLS) at the transport layer with Keycloak JWT tokens at the application layer.
+
+==== Authentication Architecture
+
+[source]
+----
+┌─────────────────────────────────────────────────────────────────────┐
+│                    DUAL-LAYER AUTHENTICATION                        │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌──────────┐         ┌──────────┐         ┌──────────────────────┐│
+│  │   KOS    │  mTLS   │  Nginx   │  HTTP   │        KWS           ││
+│  │ Instance │◄───────►│ (TLS     │◄───────►│   Application        ││
+│  │          │         │  Term)   │         │                      ││
+│  └──────────┘         └──────────┘         └──────────────────────┘│
+│       │                    │                        │               │
+│       │                    ▼                        ▼               │
+│       │           ┌────────────────┐      ┌─────────────────────┐  │
+│       │           │ Verify Client  │      │ Verify JWT Token    │  │
+│       │           │ Certificate    │      │ - Valid signature   │  │
+│       │           │ - Valid CA     │      │ - Not expired       │  │
+│       │           │ - Not revoked  │      │ - Correct tenant    │  │
+│       │           │ - Extract CN   │      │ - Site matches cert │  │
+│       │           └────────────────┘      └─────────────────────┘  │
+│       │                                                             │
+│       ▼                                                             │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │                      Keycloak                                 │  │
+│  │  ┌─────────────────┐  ┌─────────────────────────────────┐    │  │
+│  │  │ Service Account │  │ Token Endpoint                  │    │  │
+│  │  │ per KOS Device  │  │ /realms/{tenant}/protocol/      │    │  │
+│  │  │                 │  │    openid-connect/token         │    │  │
+│  │  └─────────────────┘  └─────────────────────────────────┘    │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+
+Layer 1: mTLS (Transport)
+  - Proves the device is legitimate (has valid certificate)
+  - Certificate CN = kos-{site_id}
+  - Nginx terminates TLS and passes CN via X-Client-Cert-CN header
+
+Layer 2: JWT (Application)
+  - Provides tenant context, site binding, permissions
+  - Short-lived (15 minutes) with auto-refresh
+  - Claims include: tenant_id, site_id, region_id, roles
+----
+
+==== Certificate Authority Setup
+
+[source,bash]
+----
+#!/bin/bash
+# scripts/ca-setup.sh - Initialize KWS Certificate Authority
+
+CA_DIR="/etc/kws/ca"
+CA_VALIDITY_DAYS=3650  # 10 years
+CERT_VALIDITY_DAYS=365 # 1 year
+
+# Create CA directory structure
+mkdir -p ${CA_DIR}/{certs,crl,newcerts,private,csr}
+chmod 700 ${CA_DIR}/private
+touch ${CA_DIR}/index.txt
+echo 1000 > ${CA_DIR}/serial
+echo 1000 > ${CA_DIR}/crlnumber
+
+# Generate CA private key
+openssl genrsa -aes256 -out ${CA_DIR}/private/ca.key 4096
+chmod 400 ${CA_DIR}/private/ca.key
+
+# Generate CA certificate
+openssl req -config ${CA_DIR}/openssl.cnf \
+    -key ${CA_DIR}/private/ca.key \
+    -new -x509 -days ${CA_VALIDITY_DAYS} \
+    -sha256 -extensions v3_ca \
+    -out ${CA_DIR}/certs/ca.crt \
+    -subj "/C=US/ST=State/O=KWS/OU=Device CA/CN=KWS Device CA"
+
+# Generate empty CRL
+openssl ca -config ${CA_DIR}/openssl.cnf \
+    -gencrl -out ${CA_DIR}/crl/ca.crl
+
+echo "CA initialized at ${CA_DIR}"
+----
+
+==== OpenSSL Configuration
+
+[source,ini]
+----
+# /etc/kws/ca/openssl.cnf
+[ ca ]
+default_ca = CA_default
+
+[ CA_default ]
+dir               = /etc/kws/ca
+certs             = $dir/certs
+crl_dir           = $dir/crl
+new_certs_dir     = $dir/newcerts
+database          = $dir/index.txt
+serial            = $dir/serial
+crlnumber         = $dir/crlnumber
+
+private_key       = $dir/private/ca.key
+certificate       = $dir/certs/ca.crt
+
+crl               = $dir/crl/ca.crl
+default_crl_days  = 30
+default_md        = sha256
+preserve          = no
+policy            = policy_strict
+
+[ policy_strict ]
+countryName             = match
+stateOrProvinceName     = match
+organizationName        = match
+organizationalUnitName  = optional
+commonName              = supplied
+emailAddress            = optional
+
+[ req ]
+default_bits        = 2048
+distinguished_name  = req_distinguished_name
+string_mask         = utf8only
+default_md          = sha256
+x509_extensions     = v3_ca
+
+[ req_distinguished_name ]
+countryName                     = Country Name
+stateOrProvinceName             = State
+organizationName                = Organization Name
+commonName                      = Common Name
+
+[ v3_ca ]
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints = critical, CA:true
+keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+
+[ client_cert ]
+basicConstraints = CA:FALSE
+nsCertType = client
+nsComment = "KOS Device Client Certificate"
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth
+----
+
+==== Certificate Generation Service
+
+[source,go]
+----
+package auth
+
+import (
+    "bytes"
+    "context"
+    "crypto/rand"
+    "crypto/rsa"
+    "crypto/x509"
+    "crypto/x509/pkix"
+    "encoding/pem"
+    "fmt"
+    "math/big"
+    "os/exec"
+    "time"
+
+    "go.mongodb.org/mongo-driver/bson/primitive"
+)
+
+const (
+    CertValidityDays = 365
+    KeySize          = 2048
+)
+
+type CertificateBundle struct {
+    Certificate    string `json:"certificate"`     // PEM-encoded certificate
+    PrivateKey     string `json:"private_key"`     // PEM-encoded private key (only returned once)
+    CACertificate  string `json:"ca_certificate"`  // PEM-encoded CA certificate
+    ExpiresAt      time.Time `json:"expires_at"`
+    SerialNumber   string `json:"serial_number"`
+}
+
+type CertificateService struct {
+    caKeyPath    string
+    caCertPath   string
+    crlPath      string
+    opensslConf  string
+}
+
+func NewCertificateService(caDir string) *CertificateService {
+    return &CertificateService{
+        caKeyPath:   caDir + "/private/ca.key",
+        caCertPath:  caDir + "/certs/ca.crt",
+        crlPath:     caDir + "/crl/ca.crl",
+        opensslConf: caDir + "/openssl.cnf",
+    }
+}
+
+// GenerateKOSCertificate creates a client certificate for a KOS instance
+func (s *CertificateService) GenerateKOSCertificate(
+    ctx context.Context,
+    tenantID string,
+    siteID string,
+    siteCode string,
+) (*CertificateBundle, error) {
+    // CN format: kos-{site_id} for unique identification
+    commonName := fmt.Sprintf("kos-%s", siteID)
+
+    // Generate RSA key pair
+    privateKey, err := rsa.GenerateKey(rand.Reader, KeySize)
+    if err != nil {
+        return nil, fmt.Errorf("failed to generate private key: %w", err)
+    }
+
+    // Create certificate serial number
+    serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+    if err != nil {
+        return nil, fmt.Errorf("failed to generate serial number: %w", err)
+    }
+
+    // Load CA certificate and key
+    caCert, caKey, err := s.loadCA()
+    if err != nil {
+        return nil, fmt.Errorf("failed to load CA: %w", err)
+    }
+
+    // Certificate validity
+    notBefore := time.Now()
+    notAfter := notBefore.Add(time.Duration(CertValidityDays) * 24 * time.Hour)
+
+    // Create certificate template
+    template := x509.Certificate{
+        SerialNumber: serialNumber,
+        Subject: pkix.Name{
+            Country:            []string{"US"},
+            Organization:       []string{"KWS"},
+            OrganizationalUnit: []string{tenantID},
+            CommonName:         commonName,
+        },
+        NotBefore:             notBefore,
+        NotAfter:              notAfter,
+        KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+        ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+        BasicConstraintsValid: true,
+        IsCA:                  false,
+    }
+
+    // Sign certificate with CA
+    certDER, err := x509.CreateCertificate(rand.Reader, &template, caCert, &privateKey.PublicKey, caKey)
+    if err != nil {
+        return nil, fmt.Errorf("failed to create certificate: %w", err)
+    }
+
+    // Encode to PEM
+    certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+    keyPEM := pem.EncodeToMemory(&pem.Block{
+        Type:  "RSA PRIVATE KEY",
+        Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+    })
+
+    // Load CA certificate for bundle
+    caCertPEM, err := s.loadCACertPEM()
+    if err != nil {
+        return nil, fmt.Errorf("failed to load CA certificate: %w", err)
+    }
+
+    return &CertificateBundle{
+        Certificate:   string(certPEM),
+        PrivateKey:    string(keyPEM),
+        CACertificate: string(caCertPEM),
+        ExpiresAt:     notAfter,
+        SerialNumber:  serialNumber.Text(16),
+    }, nil
+}
+
+// RevokeCertificate revokes a certificate by serial number
+func (s *CertificateService) RevokeCertificate(ctx context.Context, serialNumber string) error {
+    // Use OpenSSL to revoke and regenerate CRL
+    cmd := exec.CommandContext(ctx, "openssl", "ca",
+        "-config", s.opensslConf,
+        "-revoke", fmt.Sprintf("newcerts/%s.pem", serialNumber),
+    )
+
+    if err := cmd.Run(); err != nil {
+        return fmt.Errorf("failed to revoke certificate: %w", err)
+    }
+
+    // Regenerate CRL
+    crlCmd := exec.CommandContext(ctx, "openssl", "ca",
+        "-config", s.opensslConf,
+        "-gencrl",
+        "-out", s.crlPath,
+    )
+
+    if err := crlCmd.Run(); err != nil {
+        return fmt.Errorf("failed to regenerate CRL: %w", err)
+    }
+
+    return nil
+}
+
+func (s *CertificateService) loadCA() (*x509.Certificate, *rsa.PrivateKey, error) {
+    // Implementation: load and parse CA cert and key from files
+    // ... (standard PEM parsing)
+    return nil, nil, nil // Placeholder
+}
+
+func (s *CertificateService) loadCACertPEM() ([]byte, error) {
+    // Implementation: read CA certificate file
+    return nil, nil // Placeholder
+}
+----
+
+==== Nginx mTLS Configuration
+
+[source,nginx]
+----
+# /etc/nginx/conf.d/kws-mtls.conf
+
+# Upstream for KWS API
+upstream kws_api {
+    server 127.0.0.1:8080;
+    keepalive 32;
+}
+
+# mTLS server for KOS devices
+server {
+    listen 443 ssl http2;
+    server_name kos-api.kws.example.com;
+
+    # Server certificate (standard TLS)
+    ssl_certificate     /etc/nginx/ssl/server.crt;
+    ssl_certificate_key /etc/nginx/ssl/server.key;
+
+    # Client certificate verification (mTLS)
+    ssl_client_certificate /etc/kws/ca/certs/ca.crt;
+    ssl_crl                /etc/kws/ca/crl/ca.crl;
+    ssl_verify_client      on;
+    ssl_verify_depth       2;
+
+    # TLS settings
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+
+    # OCSP stapling
+    ssl_stapling on;
+    ssl_stapling_verify on;
+
+    # KOS API endpoints (require mTLS)
+    location /api/v1/kos/ {
+        # Reject if client cert not provided
+        if ($ssl_client_verify != SUCCESS) {
+            return 403;
+        }
+
+        # Extract client certificate info
+        # CN format: kos-{site_id}
+        set $client_cn $ssl_client_s_dn_cn;
+        set $client_org_unit $ssl_client_s_dn_ou;
+
+        # Pass certificate info to backend
+        proxy_set_header X-Client-Cert-CN $client_cn;
+        proxy_set_header X-Client-Cert-OU $client_org_unit;
+        proxy_set_header X-Client-Cert-Serial $ssl_client_serial;
+        proxy_set_header X-Client-Cert-Verify $ssl_client_verify;
+        proxy_set_header X-SSL-Client-S-DN $ssl_client_s_dn;
+
+        # Standard proxy headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_pass http://kws_api;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+    }
+
+    # Health check (no mTLS required)
+    location /health {
+        proxy_pass http://kws_api;
+    }
+}
+
+# Regular HTTPS server for web UI and human users
+server {
+    listen 443 ssl http2;
+    server_name kws.example.com;
+
+    ssl_certificate     /etc/nginx/ssl/server.crt;
+    ssl_certificate_key /etc/nginx/ssl/server.key;
+
+    # No client certificate required for web UI
+    ssl_verify_client off;
+
+    location / {
+        proxy_pass http://kws_api;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+----
+
+==== Keycloak Service Account Setup
+
+Each KOS instance gets a dedicated service account in Keycloak for JWT token issuance.
+
+[source,go]
+----
+package keycloak
+
+import (
+    "bytes"
+    "context"
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "net/url"
+    "strings"
+    "time"
+)
+
+// KOSServiceAccountConfig represents the Keycloak client for a KOS instance
+type KOSServiceAccountConfig struct {
+    ClientID     string `json:"clientId"`
+    ClientSecret string `json:"secret"`     // Only returned once during creation
+    TenantID     string `json:"tenant_id"`  // Realm name
+    SiteID       string `json:"site_id"`
+    RegionID     string `json:"region_id"`
+}
+
+// CreateKOSServiceAccount creates a Keycloak client with service account for a KOS instance
+func (k *KeycloakAdmin) CreateKOSServiceAccount(
+    ctx context.Context,
+    tenantID, regionID, siteID, siteCode string,
+) (*KOSServiceAccountConfig, error) {
+    clientID := fmt.Sprintf("kos-%s", siteID)
+
+    // Client configuration
+    clientConfig := map[string]interface{}{
+        "clientId":                     clientID,
+        "name":                         fmt.Sprintf("KOS Instance - %s", siteCode),
+        "description":                  fmt.Sprintf("Service account for KOS at site %s", siteCode),
+        "enabled":                      true,
+        "clientAuthenticatorType":      "client-secret",
+        "serviceAccountsEnabled":       true,
+        "standardFlowEnabled":          false,
+        "implicitFlowEnabled":          false,
+        "directAccessGrantsEnabled":    false,
+        "publicClient":                 false,
+        "protocol":                     "openid-connect",
+        "attributes": map[string]string{
+            "site_id":   siteID,
+            "region_id": regionID,
+            "tenant_id": tenantID,
+        },
+    }
+
+    body, _ := json.Marshal(clientConfig)
+
+    req, err := http.NewRequestWithContext(ctx, "POST",
+        fmt.Sprintf("%s/admin/realms/%s/clients", k.baseURL, tenantID),
+        bytes.NewReader(body))
+    if err != nil {
+        return nil, err
+    }
+
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer "+k.adminToken)
+
+    resp, err := k.client.Do(req)
+    if err != nil {
+        return nil, fmt.Errorf("failed to create client: %w", err)
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode != http.StatusCreated {
+        return nil, fmt.Errorf("failed to create client: status %d", resp.StatusCode)
+    }
+
+    // Get client UUID from Location header
+    location := resp.Header.Get("Location")
+    clientUUID := location[strings.LastIndex(location, "/")+1:]
+
+    // Get client secret
+    secret, err := k.getClientSecret(ctx, tenantID, clientUUID)
+    if err != nil {
+        return nil, fmt.Errorf("failed to get client secret: %w", err)
+    }
+
+    // Assign roles to service account
+    if err := k.assignServiceAccountRoles(ctx, tenantID, clientUUID, siteID, regionID); err != nil {
+        return nil, fmt.Errorf("failed to assign roles: %w", err)
+    }
+
+    // Add custom claims mapper for site_id and region_id
+    if err := k.addClaimsMapper(ctx, tenantID, clientUUID, siteID, regionID); err != nil {
+        return nil, fmt.Errorf("failed to add claims mapper: %w", err)
+    }
+
+    return &KOSServiceAccountConfig{
+        ClientID:     clientID,
+        ClientSecret: secret,
+        TenantID:     tenantID,
+        SiteID:       siteID,
+        RegionID:     regionID,
+    }, nil
+}
+
+// addClaimsMapper adds protocol mappers for custom claims
+func (k *KeycloakAdmin) addClaimsMapper(ctx context.Context, realm, clientUUID, siteID, regionID string) error {
+    mappers := []map[string]interface{}{
+        {
+            "name":           "site_id",
+            "protocol":       "openid-connect",
+            "protocolMapper": "oidc-hardcoded-claim-mapper",
+            "config": map[string]string{
+                "claim.name":      "site_id",
+                "claim.value":     siteID,
+                "jsonType.label":  "String",
+                "id.token.claim":  "true",
+                "access.token.claim": "true",
+            },
+        },
+        {
+            "name":           "region_id",
+            "protocol":       "openid-connect",
+            "protocolMapper": "oidc-hardcoded-claim-mapper",
+            "config": map[string]string{
+                "claim.name":      "region_id",
+                "claim.value":     regionID,
+                "jsonType.label":  "String",
+                "id.token.claim":  "true",
+                "access.token.claim": "true",
+            },
+        },
+    }
+
+    for _, mapper := range mappers {
+        body, _ := json.Marshal(mapper)
+        req, _ := http.NewRequestWithContext(ctx, "POST",
+            fmt.Sprintf("%s/admin/realms/%s/clients/%s/protocol-mappers/models",
+                k.baseURL, realm, clientUUID),
+            bytes.NewReader(body))
+        req.Header.Set("Content-Type", "application/json")
+        req.Header.Set("Authorization", "Bearer "+k.adminToken)
+
+        resp, err := k.client.Do(req)
+        if err != nil {
+            return err
+        }
+        resp.Body.Close()
+    }
+
+    return nil
+}
+----
+
+==== KOS Registration Flow
+
+[source]
+----
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                          KOS REGISTRATION FLOW                                  │
+├────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                │
+│  Step 1: Admin creates KOS instance in KWS UI                                  │
+│  ┌──────────────────────────────────────────────────────────────────────────┐  │
+│  │  POST /api/v1/admin/kos-instances                                        │  │
+│  │  {                                                                        │  │
+│  │    "site_id": "uuid",                                                     │  │
+│  │    "name": "Downtown Kitchen KOS"                                         │  │
+│  │  }                                                                        │  │
+│  └──────────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                            │
+│                                    ▼                                            │
+│  Step 2: KWS generates credentials                                             │
+│  ┌──────────────────────────────────────────────────────────────────────────┐  │
+│  │  a) Generate client certificate (valid 1 year)                           │  │
+│  │  b) Create Keycloak service account                                       │  │
+│  │  c) Generate registration token (one-time use, expires in 24h)           │  │
+│  └──────────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                            │
+│                                    ▼                                            │
+│  Step 3: Admin downloads provisioning bundle                                   │
+│  ┌──────────────────────────────────────────────────────────────────────────┐  │
+│  │  GET /api/v1/admin/kos-instances/{id}/provisioning-bundle                │  │
+│  │                                                                          │  │
+│  │  Returns: kos-credentials.zip containing:                                │  │
+│  │    - client.crt (client certificate)                                     │  │
+│  │    - client.key (private key) [SENSITIVE]                               │  │
+│  │    - ca.crt (CA certificate for verification)                           │  │
+│  │    - kws-config.yaml (Keycloak credentials + KWS URL)                   │  │
+│  └──────────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                            │
+│                                    ▼                                            │
+│  Step 4: Admin installs bundle on KOS                                          │
+│  ┌──────────────────────────────────────────────────────────────────────────┐  │
+│  │  # On KOS server                                                         │  │
+│  │  kos configure kws --bundle /path/to/kos-credentials.zip                │  │
+│  │                                                                          │  │
+│  │  This:                                                                   │  │
+│  │    - Extracts certificates to /etc/kos/certs/                           │  │
+│  │    - Updates KOS config with KWS connection settings                    │  │
+│  │    - Tests connectivity                                                  │  │
+│  └──────────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                            │
+│                                    ▼                                            │
+│  Step 5: KOS confirms registration                                             │
+│  ┌──────────────────────────────────────────────────────────────────────────┐  │
+│  │  POST /api/v1/kos/register (via mTLS)                                    │  │
+│  │  Authorization: Bearer {jwt_token}                                        │  │
+│  │  {                                                                        │  │
+│  │    "registration_token": "one-time-token",                               │  │
+│  │    "kos_version": "1.2.0",                                               │  │
+│  │    "kitchens": [...]                                                     │  │
+│  │  }                                                                        │  │
+│  │                                                                          │  │
+│  │  Response: { "status": "registered", "sync_enabled": true }              │  │
+│  └──────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                │
+└────────────────────────────────────────────────────────────────────────────────┘
+----
+
+==== JWT Token Lifecycle and Auto-Renewal
+
+[source,go]
+----
+package kws
+
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "net/url"
+    "sync"
+    "time"
+)
+
+const (
+    // TokenRefreshThreshold - refresh token when less than this time remains
+    TokenRefreshThreshold = 2 * time.Minute
+
+    // TokenRefreshRetryDelay - delay between refresh retries on failure
+    TokenRefreshRetryDelay = 10 * time.Second
+
+    // MaxRefreshRetries - maximum number of refresh retries before giving up
+    MaxRefreshRetries = 5
+)
+
+// TokenResponse represents the OAuth2 token response from Keycloak
+type TokenResponse struct {
+    AccessToken      string `json:"access_token"`
+    ExpiresIn        int    `json:"expires_in"`
+    RefreshExpiresIn int    `json:"refresh_expires_in"`
+    TokenType        string `json:"token_type"`
+    NotBeforePolicy  int    `json:"not-before-policy"`
+    Scope            string `json:"scope"`
+}
+
+// JWTManager handles JWT token lifecycle for KOS-KWS authentication
+type JWTManager struct {
+    mu sync.RWMutex
+
+    // Configuration
+    keycloakURL  string
+    realm        string
+    clientID     string
+    clientSecret string
+
+    // Current token state
+    accessToken  string
+    expiresAt    time.Time
+
+    // HTTP client
+    httpClient *http.Client
+
+    // Token refresh control
+    stopRefresh chan struct{}
+    refreshing  bool
+}
+
+// NewJWTManager creates a new JWT manager for KOS
+func NewJWTManager(keycloakURL, realm, clientID, clientSecret string) *JWTManager {
+    return &JWTManager{
+        keycloakURL:  keycloakURL,
+        realm:        realm,
+        clientID:     clientID,
+        clientSecret: clientSecret,
+        httpClient:   &http.Client{Timeout: 30 * time.Second},
+        stopRefresh:  make(chan struct{}),
+    }
+}
+
+// Start initializes the token and starts the auto-refresh goroutine
+func (m *JWTManager) Start(ctx context.Context) error {
+    // Initial token fetch
+    if err := m.refreshToken(ctx); err != nil {
+        return fmt.Errorf("failed to obtain initial token: %w", err)
+    }
+
+    // Start background refresh
+    go m.autoRefreshLoop(ctx)
+
+    return nil
+}
+
+// Stop stops the auto-refresh goroutine
+func (m *JWTManager) Stop() {
+    close(m.stopRefresh)
+}
+
+// GetToken returns the current valid access token
+// Blocks if token is being refreshed
+func (m *JWTManager) GetToken() (string, error) {
+    m.mu.RLock()
+    defer m.mu.RUnlock()
+
+    if m.accessToken == "" {
+        return "", fmt.Errorf("no valid token available")
+    }
+
+    // Check if token is expired (should not happen with auto-refresh)
+    if time.Now().After(m.expiresAt) {
+        return "", fmt.Errorf("token has expired")
+    }
+
+    return m.accessToken, nil
+}
+
+// refreshToken fetches a new token using client credentials grant
+func (m *JWTManager) refreshToken(ctx context.Context) error {
+    tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token",
+        m.keycloakURL, m.realm)
+
+    data := url.Values{
+        "grant_type":    {"client_credentials"},
+        "client_id":     {m.clientID},
+        "client_secret": {m.clientSecret},
+    }
+
+    req, err := http.NewRequestWithContext(ctx, "POST", tokenURL,
+        strings.NewReader(data.Encode()))
+    if err != nil {
+        return fmt.Errorf("failed to create request: %w", err)
+    }
+
+    req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+    resp, err := m.httpClient.Do(req)
+    if err != nil {
+        return fmt.Errorf("token request failed: %w", err)
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode != http.StatusOK {
+        return fmt.Errorf("token request returned status %d", resp.StatusCode)
+    }
+
+    var tokenResp TokenResponse
+    if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+        return fmt.Errorf("failed to decode token response: %w", err)
+    }
+
+    // Update token state
+    m.mu.Lock()
+    m.accessToken = tokenResp.AccessToken
+    m.expiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
+    m.mu.Unlock()
+
+    return nil
+}
+
+// autoRefreshLoop continuously refreshes the token before expiration
+func (m *JWTManager) autoRefreshLoop(ctx context.Context) {
+    for {
+        // Calculate time until we should refresh
+        m.mu.RLock()
+        timeUntilRefresh := time.Until(m.expiresAt) - TokenRefreshThreshold
+        m.mu.RUnlock()
+
+        // Ensure we don't wait negative time
+        if timeUntilRefresh < 0 {
+            timeUntilRefresh = 0
+        }
+
+        select {
+        case <-ctx.Done():
+            return
+        case <-m.stopRefresh:
+            return
+        case <-time.After(timeUntilRefresh):
+            // Time to refresh
+            m.performRefreshWithRetry(ctx)
+        }
+    }
+}
+
+// performRefreshWithRetry attempts to refresh the token with retries
+func (m *JWTManager) performRefreshWithRetry(ctx context.Context) {
+    m.mu.Lock()
+    m.refreshing = true
+    m.mu.Unlock()
+
+    defer func() {
+        m.mu.Lock()
+        m.refreshing = false
+        m.mu.Unlock()
+    }()
+
+    var lastErr error
+    for attempt := 1; attempt <= MaxRefreshRetries; attempt++ {
+        if err := m.refreshToken(ctx); err != nil {
+            lastErr = err
+
+            // Log retry attempt
+            fmt.Printf("Token refresh attempt %d/%d failed: %v\n",
+                attempt, MaxRefreshRetries, err)
+
+            // Wait before retry (with context cancellation check)
+            select {
+            case <-ctx.Done():
+                return
+            case <-m.stopRefresh:
+                return
+            case <-time.After(TokenRefreshRetryDelay):
+                continue
+            }
+        } else {
+            // Success
+            return
+        }
+    }
+
+    // All retries failed
+    fmt.Printf("CRITICAL: Token refresh failed after %d attempts: %v\n",
+        MaxRefreshRetries, lastErr)
+}
+
+// IsTokenValid returns whether the current token is valid
+func (m *JWTManager) IsTokenValid() bool {
+    m.mu.RLock()
+    defer m.mu.RUnlock()
+    return m.accessToken != "" && time.Now().Before(m.expiresAt)
+}
+
+// TimeUntilExpiry returns the duration until the token expires
+func (m *JWTManager) TimeUntilExpiry() time.Duration {
+    m.mu.RLock()
+    defer m.mu.RUnlock()
+    return time.Until(m.expiresAt)
+}
+----
+
+==== Keycloak Token Configuration
+
+Configure the service account client in Keycloak with appropriate token lifetimes:
+
+[source,json]
+----
+{
+  "clientId": "kos-{site_id}",
+  "attributes": {
+    "access.token.lifespan": "900",
+    "client.session.idle.timeout": "1800",
+    "client.session.max.lifespan": "36000"
+  }
+}
+----
+
+Token lifetime recommendations:
+
+[cols="1,1,2"]
+|===
+|Setting |Value |Rationale
+
+|Access Token Lifespan
+|15 minutes (900s)
+|Short-lived for security; auto-refresh handles renewal
+
+|Refresh Before Expiry
+|2 minutes
+|Buffer time to ensure uninterrupted API access
+
+|Client Session Idle
+|30 minutes
+|Grace period for temporary network issues
+
+|Client Session Max
+|10 hours
+|Maximum session duration before re-authentication
+|===
+
+==== Dual Validation Middleware
+
+[source,go]
+----
+package middleware
+
+import (
+    "context"
+    "fmt"
+    "net/http"
+    "strings"
+
+    "github.com/golang-jwt/jwt/v5"
+    "github.com/ak/kws/internal/pkg/errors"
+)
+
+// KOSAuthClaims represents the JWT claims for KOS service accounts
+type KOSAuthClaims struct {
+    jwt.RegisteredClaims
+    TenantID string `json:"tenant_id"`
+    SiteID   string `json:"site_id"`
+    RegionID string `json:"region_id"`
+    ClientID string `json:"azp"`  // Authorized party (client_id)
+}
+
+// KOSAuthMiddleware validates both mTLS certificate and JWT token
+type KOSAuthMiddleware struct {
+    jwtPublicKey interface{}  // Keycloak public key for JWT verification
+}
+
+// Authenticate performs dual-layer authentication for KOS requests
+func (m *KOSAuthMiddleware) Authenticate(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // Layer 1: Validate mTLS certificate (passed by Nginx)
+        certCN := r.Header.Get("X-Client-Cert-CN")
+        certVerify := r.Header.Get("X-Client-Cert-Verify")
+        certOU := r.Header.Get("X-Client-Cert-OU")
+
+        if certVerify != "SUCCESS" {
+            errors.WriteError(w, http.StatusUnauthorized,
+                "CERT_INVALID", "Client certificate verification failed")
+            return
+        }
+
+        if certCN == "" || !strings.HasPrefix(certCN, "kos-") {
+            errors.WriteError(w, http.StatusUnauthorized,
+                "CERT_CN_INVALID", "Invalid certificate common name")
+            return
+        }
+
+        // Extract site_id from certificate CN (format: kos-{site_id})
+        certSiteID := strings.TrimPrefix(certCN, "kos-")
+
+        // Layer 2: Validate JWT token
+        authHeader := r.Header.Get("Authorization")
+        if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+            errors.WriteError(w, http.StatusUnauthorized,
+                "TOKEN_MISSING", "Bearer token required")
+            return
+        }
+
+        tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+
+        claims, err := m.validateJWT(tokenString)
+        if err != nil {
+            errors.WriteError(w, http.StatusUnauthorized,
+                "TOKEN_INVALID", fmt.Sprintf("Invalid token: %v", err))
+            return
+        }
+
+        // Cross-layer validation: Certificate CN must match JWT site_id
+        if certSiteID != claims.SiteID {
+            errors.WriteError(w, http.StatusForbidden,
+                "SITE_MISMATCH",
+                "Certificate site does not match token site")
+            return
+        }
+
+        // Validate tenant from certificate OU matches JWT tenant
+        if certOU != claims.TenantID {
+            errors.WriteError(w, http.StatusForbidden,
+                "TENANT_MISMATCH",
+                "Certificate tenant does not match token tenant")
+            return
+        }
+
+        // Add validated claims to context
+        ctx := r.Context()
+        ctx = context.WithValue(ctx, TenantIDKey, claims.TenantID)
+        ctx = context.WithValue(ctx, SiteIDKey, claims.SiteID)
+        ctx = context.WithValue(ctx, RegionIDKey, claims.RegionID)
+        ctx = context.WithValue(ctx, KOSClientIDKey, claims.ClientID)
+
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
+
+// validateJWT parses and validates the JWT token
+func (m *KOSAuthMiddleware) validateJWT(tokenString string) (*KOSAuthClaims, error) {
+    token, err := jwt.ParseWithClaims(tokenString, &KOSAuthClaims{},
+        func(token *jwt.Token) (interface{}, error) {
+            // Verify signing algorithm
+            if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+                return nil, fmt.Errorf("unexpected signing method: %v",
+                    token.Header["alg"])
+            }
+            return m.jwtPublicKey, nil
+        })
+
+    if err != nil {
+        return nil, err
+    }
+
+    claims, ok := token.Claims.(*KOSAuthClaims)
+    if !ok || !token.Valid {
+        return nil, fmt.Errorf("invalid token claims")
+    }
+
+    return claims, nil
+}
+
+// Context keys for KOS authentication
+const (
+    SiteIDKey     contextKey = "site_id"
+    RegionIDKey   contextKey = "region_id"
+    KOSClientIDKey contextKey = "kos_client_id"
+)
+----
+
+==== Certificate Renewal
+
+Certificates are valid for 1 year and should be renewed proactively.
+
+[source,go]
+----
+package kws
+
+import (
+    "context"
+    "time"
+)
+
+const (
+    // CertRenewalThreshold - renew certificate when less than this time remains
+    CertRenewalThreshold = 30 * 24 * time.Hour // 30 days
+
+    // CertCheckInterval - how often to check certificate expiry
+    CertCheckInterval = 24 * time.Hour
+)
+
+// CertificateRenewalService handles proactive certificate renewal
+type CertificateRenewalService struct {
+    certService *CertificateService
+    notifier    NotificationService
+}
+
+// CheckAndRenewCertificates scans for expiring certificates and initiates renewal
+func (s *CertificateRenewalService) CheckAndRenewCertificates(ctx context.Context) error {
+    // Find certificates expiring within threshold
+    expiringCerts, err := s.certService.FindExpiringCertificates(ctx, CertRenewalThreshold)
+    if err != nil {
+        return err
+    }
+
+    for _, cert := range expiringCerts {
+        // Notify tenant admin about upcoming renewal
+        s.notifier.NotifyAdmin(ctx, cert.TenantID, NotificationCertExpiring{
+            SiteID:    cert.SiteID,
+            ExpiresAt: cert.ExpiresAt,
+            DaysLeft:  int(time.Until(cert.ExpiresAt).Hours() / 24),
+        })
+
+        // Generate new certificate
+        newCert, err := s.certService.GenerateKOSCertificate(
+            ctx, cert.TenantID, cert.SiteID, cert.SiteCode)
+        if err != nil {
+            continue // Log error, try next
+        }
+
+        // Store new certificate, mark old for revocation after transition
+        s.certService.StorePendingRenewal(ctx, cert.ID, newCert)
+
+        // Notify that new certificate is available
+        s.notifier.NotifyAdmin(ctx, cert.TenantID, NotificationCertRenewed{
+            SiteID:       cert.SiteID,
+            NewExpiresAt: newCert.ExpiresAt,
+            DownloadURL:  fmt.Sprintf("/api/v1/admin/kos/%s/download-cert", cert.SiteID),
+        })
+    }
+
+    return nil
+}
+----
+
+==== Security Considerations
+
+1. **Private Key Protection**: Client private keys are generated server-side and transmitted only once during provisioning. Admin must securely transfer the bundle to the KOS server.
+
+2. **Certificate Revocation**: When a KOS instance is decommissioned or compromised, revoke its certificate immediately. Nginx checks CRL on each connection.
+
+3. **Token Exposure**: JWT tokens are short-lived (15 min) to minimize exposure window. Even if captured, they're useless without the matching client certificate.
+
+4. **Network Segmentation**: The mTLS endpoint (kos-api.kws.example.com) should be separate from the web UI endpoint, allowing different firewall rules.
+
+5. **Audit Trail**: All authentication events (token refresh, certificate validation, failures) are logged for security monitoring.
+
+== Monitoring & Observability
+
+=== Health Check Endpoint
+
+[source,go]
+----
+// GET /health
+func (h *HealthHandler) Health(w http.ResponseWriter, r *http.Request) {
+    checks := map[string]string{
+        "mariadb":  h.checkMariaDB(),
+        "mongodb":  h.checkMongoDB(),
+        "keycloak": h.checkKeycloak(),
+    }
+
+    allHealthy := true
+    for _, status := range checks {
+        if status != "healthy" {
+            allHealthy = false
+            break
+        }
+    }
+
+    response := map[string]interface{}{
+        "status": map[bool]string{true: "healthy", false: "degraded"}[allHealthy],
+        "checks": checks,
+        "version": h.version,
+        "uptime": time.Since(h.startTime).String(),
+    }
+
+    if allHealthy {
+        w.WriteHeader(http.StatusOK)
+    } else {
+        w.WriteHeader(http.StatusServiceUnavailable)
+    }
+
+    json.NewEncoder(w).Encode(response)
+}
+----
+
+=== Metrics
+
+Key metrics to expose (Prometheus format):
+
+[source]
+----
+# API metrics
+kws_http_requests_total{method, path, status}
+kws_http_request_duration_seconds{method, path}
+
+# Order metrics
+kws_orders_created_total{tenant, region, site}
+kws_orders_completed_total{tenant, region, site}
+kws_order_processing_duration_seconds{tenant, site}
+
+# KOS instance metrics
+kws_kos_instances_total{status}
+kws_kos_heartbeat_age_seconds{site}
+
+# Database metrics
+kws_db_connections_active
+kws_db_query_duration_seconds{query_type}
+----
+
+== Testing Strategy
+
+=== Test Categories
+
+[cols="1,2,2"]
+|===
+|Category |Scope |Tools
+
+|Unit Tests
+|Individual functions, business logic
+|Go testing, testify
+
+|Integration Tests
+|Database operations, API handlers
+|testcontainers-go, httptest
+
+|E2E Tests
+|Full API flows
+|Postman/Newman, k6
+
+|Load Tests
+|Performance under load
+|k6, vegeta
+|===
+
+=== Test Database Setup
+
+[source,go]
+----
+// internal/infrastructure/database/testdb.go
+package database
+
+import (
+    "context"
+    "testing"
+
+    "github.com/testcontainers/testcontainers-go"
+    "github.com/testcontainers/testcontainers-go/modules/mariadb"
+)
+
+func SetupTestMariaDB(t *testing.T) (*MariaDB, func()) {
+    ctx := context.Background()
+
+    container, err := mariadb.RunContainer(ctx,
+        testcontainers.WithImage("mariadb:10.11"),
+        mariadb.WithDatabase("kws_test"),
+        mariadb.WithUsername("test"),
+        mariadb.WithPassword("test"),
+    )
+    if err != nil {
+        t.Fatalf("failed to start container: %v", err)
+    }
+
+    connStr, _ := container.ConnectionString(ctx)
+    db, err := NewMariaDB(connStr)
+    if err != nil {
+        t.Fatalf("failed to connect: %v", err)
+    }
+
+    // Run migrations
+    db.AutoMigrate(/* models */)
+
+    cleanup := func() {
+        container.Terminate(ctx)
+    }
+
+    return db, cleanup
+}
+----
+
+== Document Control
+
+[cols="1,1,1,2"]
+|===
+|Version |Date |Author |Changes
+
+|1.0
+|Dec 2024
+|KOS Team
+|Initial technical design with Keycloak IAM, MongoDB-only, home lab deployment
+
+|1.1
+|Dec 2024
+|KOS Team
+|Added KOS Device Authentication with mTLS + Keycloak JWT dual-layer security, certificate management, JWT auto-renewal
+|===
+
+---
+
+_This document should be read in conjunction with the KWS Requirements Document and KWS Functional Specification._

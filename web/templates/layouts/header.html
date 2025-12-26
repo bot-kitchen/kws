@@ -1,0 +1,85 @@
+{{define "header"}}
+<header class="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6">
+    <!-- Left side -->
+    <div class="flex items-center space-x-4">
+        <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
+            {{block "page-title" .}}Dashboard{{end}}
+        </h1>
+    </div>
+
+    <!-- Right side -->
+    <div class="flex items-center space-x-4">
+        <!-- Search -->
+        <div class="relative" x-data="{ open: false }">
+            <input type="text"
+                   placeholder="Search..."
+                   class="w-64 pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+            <span class="material-icons-outlined absolute left-3 top-2.5 text-gray-400">search</span>
+        </div>
+
+        <!-- Dark mode toggle -->
+        <button @click="darkMode = !darkMode"
+                class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700">
+            <span class="material-icons-outlined" x-text="darkMode ? 'light_mode' : 'dark_mode'"></span>
+        </button>
+
+        <!-- Notifications -->
+        <div class="relative" x-data="{ open: false }">
+            <button @click="open = !open"
+                    class="relative p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700">
+                <span class="material-icons-outlined">notifications</span>
+                <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+            </button>
+
+            <div x-show="open"
+                 @click.away="open = false"
+                 x-transition
+                 class="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-50">
+                <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                    <h3 class="font-semibold text-gray-900 dark:text-white">Notifications</h3>
+                </div>
+                <div class="max-h-64 overflow-y-auto">
+                    <div class="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+                        <p class="text-sm text-gray-900 dark:text-white">KOS instance sf-downtown is offline</p>
+                        <p class="text-xs text-gray-500 mt-1">2 minutes ago</p>
+                    </div>
+                    <div class="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+                        <p class="text-sm text-gray-900 dark:text-white">New order received for NYC site</p>
+                        <p class="text-xs text-gray-500 mt-1">5 minutes ago</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- User menu -->
+        <div class="relative" x-data="{ open: false }">
+            <button @click="open = !open"
+                    class="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                <div class="w-8 h-8 rounded-full bg-primary-500 flex items-center justify-center text-white font-medium">
+                    {{if .User}}{{slice .User.Name 0 1}}{{else}}A{{end}}
+                </div>
+                <span class="material-icons-outlined text-gray-500">expand_more</span>
+            </button>
+
+            <div x-show="open"
+                 @click.away="open = false"
+                 x-transition
+                 class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-50">
+                <a href="/profile" class="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <span class="material-icons-outlined mr-2 text-lg">person</span>
+                    Profile
+                </a>
+                <a href="/settings" class="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <span class="material-icons-outlined mr-2 text-lg">settings</span>
+                    Settings
+                </a>
+                <hr class="my-2 border-gray-200 dark:border-gray-700">
+                <a href="/logout" class="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <span class="material-icons-outlined mr-2 text-lg">logout</span>
+                    Logout
+                </a>
+            </div>
+        </div>
+    </div>
+</header>
+{{end}}

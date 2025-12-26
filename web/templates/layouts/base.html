@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{block "title" .}}KWS - Kitchen Web Service{{end}}</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f0f4ff',
+                            100: '#e0e9ff',
+                            200: '#c7d6fe',
+                            300: '#a4bcfc',
+                            400: '#7f9cf8',
+                            500: '#5a67d8',
+                            600: '#4c51bf',
+                            700: '#434190',
+                            800: '#3c366b',
+                            900: '#312e81',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+    <!-- Alpine.js -->
+    <script defer src="https://unpkg.com/alpinejs@3.13.3/dist/cdn.min.js"></script>
+
+    <!-- Material Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
+
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+
+    {{block "head" .}}{{end}}
+</head>
+<body class="h-full bg-gray-50 dark:bg-gray-900" x-data="{ sidebarOpen: true, darkMode: localStorage.getItem('darkMode') === 'true' }"
+      x-init="$watch('darkMode', val => { localStorage.setItem('darkMode', val); document.documentElement.classList.toggle('dark', val) });
+               if(darkMode) document.documentElement.classList.add('dark')">
+
+    <div class="flex h-full">
+        <!-- Sidebar -->
+        {{template "sidebar" .}}
+
+        <!-- Main content -->
+        <div class="flex-1 flex flex-col overflow-hidden" :class="sidebarOpen ? 'ml-64' : 'ml-16'">
+            <!-- Header -->
+            {{template "header" .}}
+
+            <!-- Page content -->
+            <main class="flex-1 overflow-y-auto p-6">
+                {{block "content" .}}{{end}}
+            </main>
+        </div>
+    </div>
+
+    <!-- Toast container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+
+    <!-- Scripts -->
+    <script src="/static/js/app.js"></script>
+    {{block "scripts" .}}{{end}}
+</body>
+</html>

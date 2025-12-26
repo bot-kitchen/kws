@@ -1,0 +1,1243 @@
+= KWS (Kitchen Web Service) Functional Specification
+:author: Arun Chandrasekaran
+:revnumber: 1.0
+:revdate: December 2024
+:status: Draft
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: highlight.js
+
+== Introduction
+
+=== Purpose
+
+This Functional Specification Document (FSD) describes the user-facing functionality, workflows, and behaviors of the Kitchen Web Service (KWS). It serves as a contract between stakeholders and the development team, defining what the system does from a user's perspective.
+
+=== Scope
+
+This document covers:
+
+* User roles and personas
+* Feature specifications with acceptance criteria
+* User interface flows and wireframes
+* Business rules and validation logic
+* Integration behaviors between KWS and KOS
+
+=== Related Documents
+
+* KWS Requirements Document - High-level requirements and constraints
+* KWS Technical Design Document - Implementation architecture and schemas
+
+== User Roles and Personas
+
+=== Role Hierarchy
+
+[mermaid]
+----
+flowchart TB
+    subgraph Platform["Platform Level"]
+        PA["Platform Admin\n(KWS Internal)"]
+    end
+
+    subgraph Tenant["Tenant Level"]
+        TO["Tenant Owner"]
+        TA["Tenant Admin"]
+        RM["Regional Manager"]
+        SM["Site Manager"]
+        KO["Kitchen Operator"]
+        RC["Recipe Manager"]
+        AV["Analytics Viewer"]
+    end
+
+    PA --> TO
+    TO --> TA
+    TA --> RM
+    TA --> RC
+    TA --> AV
+    RM --> SM
+    SM --> KO
+----
+
+=== Role Definitions
+
+==== Platform Admin
+
+[cols="1,3"]
+|===
+|Attribute |Description
+
+|Scope
+|All tenants
+
+|Primary Use Case
+|Platform operations, tenant provisioning, system monitoring
+
+|Key Permissions
+|Create/suspend tenants, view system health, access all audit logs
+|===
+
+==== Tenant Owner
+
+[cols="1,3"]
+|===
+|Attribute |Description
+
+|Scope
+|Single tenant organization
+
+|Primary Use Case
+|Business owner overseeing all operations
+
+|Key Permissions
+|Full tenant access, billing management, user administration, API key management
+|===
+
+==== Tenant Admin
+
+[cols="1,3"]
+|===
+|Attribute |Description
+
+|Scope
+|Single tenant organization
+
+|Primary Use Case
+|IT/Operations administrator
+
+|Key Permissions
+|User management, region/site configuration, integration setup, all operational functions
+|===
+
+==== Regional Manager
+
+[cols="1,3"]
+|===
+|Attribute |Description
+
+|Scope
+|One or more assigned regions
+
+|Primary Use Case
+|Operations management across multiple sites in a geographic area
+
+|Key Permissions
+|View/manage sites in assigned regions, order management, regional reports
+|===
+
+==== Site Manager
+
+[cols="1,3"]
+|===
+|Attribute |Description
+
+|Scope
+|Single assigned site
+
+|Primary Use Case
+|Day-to-day site operations
+
+|Key Permissions
+|Site orders, kitchen status, local inventory, site-level reports
+|===
+
+==== Kitchen Operator
+
+[cols="1,3"]
+|===
+|Attribute |Description
+
+|Scope
+|Single assigned site
+
+|Primary Use Case
+|Kitchen floor operations
+
+|Key Permissions
+|View orders, acknowledge tasks, report issues (read-only access)
+|===
+
+==== Recipe Manager
+
+[cols="1,3"]
+|===
+|Attribute |Description
+
+|Scope
+|Entire tenant
+
+|Primary Use Case
+|Corporate chef/recipe development team
+
+|Key Permissions
+|Create/edit/publish recipes, manage ingredients, assign recipes to sites
+|===
+
+==== Analytics Viewer
+
+[cols="1,3"]
+|===
+|Attribute |Description
+
+|Scope
+|Entire tenant (read-only)
+
+|Primary Use Case
+|Business intelligence and reporting
+
+|Key Permissions
+|View all dashboards and reports, export data
+|===
+
+== Feature Specifications
+
+=== F1: Tenant Management
+
+==== F1.1: Tenant Onboarding
+
+*Description:* Platform admins can create new tenant organizations.
+
+*Actors:* Platform Admin
+
+*Preconditions:*
+
+* User is authenticated as Platform Admin
+* Tenant slug is unique across the platform
+
+*Flow:*
+
+1. Platform Admin navigates to Tenant Management
+2. Clicks "Create Tenant"
+3. Enters tenant details:
+   - Name (required)
+   - Slug (required, auto-generated from name, editable)
+   - Primary contact email
+   - Initial admin user email
+4. System creates:
+   - Tenant record in MongoDB
+   - Keycloak realm for tenant
+   - Default roles in Keycloak
+   - Sends invitation email to initial admin
+5. Initial admin completes registration via email link
+
+*Acceptance Criteria:*
+
+* [ ] Tenant slug must be unique, lowercase, alphanumeric with hyphens
+* [ ] Keycloak realm created with standard role template
+* [ ] Initial admin receives email within 5 minutes
+* [ ] Tenant status is "active" after creation
+
+==== F1.2: Tenant Suspension
+
+*Description:* Platform admins can suspend a tenant, blocking all access.
+
+*Actors:* Platform Admin
+
+*Preconditions:*
+
+* Tenant exists and is active
+
+*Flow:*
+
+1. Platform Admin navigates to tenant details
+2. Clicks "Suspend Tenant"
+3. Confirms action with reason
+4. System:
+   - Updates tenant status to "suspended"
+   - Disables Keycloak realm
+   - Invalidates all active sessions
+   - Records suspension in audit log
+
+*Acceptance Criteria:*
+
+* [ ] All tenant users immediately logged out
+* [ ] KOS instances receive 403 on API calls
+* [ ] Suspension is reversible by Platform Admin
+
+=== F2: Geographic Hierarchy Management
+
+==== F2.1: Region Management
+
+*Description:* Tenant admins can create and manage regions.
+
+*Actors:* Tenant Admin
+
+*Preconditions:*
+
+* User is authenticated with Tenant Admin role
+
+*Flow:*
+
+1. Navigate to Settings > Regions
+2. Click "Add Region"
+3. Enter region details:
+   - Name (e.g., "Sacramento Metro")
+   - Code (e.g., "SAC", unique within tenant)
+   - Timezone (e.g., "America/Los_Angeles")
+4. Save region
+
+*Business Rules:*
+
+* Region code must be unique within tenant
+* Region cannot be deleted if it has active sites
+* Timezone is used for order execution time display
+
+*Acceptance Criteria:*
+
+* [ ] Region appears in region list after creation
+* [ ] Region code validated for uniqueness
+* [ ] Deletion blocked if sites exist
+
+==== F2.2: Site Management
+
+*Description:* Tenant admins can create and manage sites within regions.
+
+*Actors:* Tenant Admin
+
+*Preconditions:*
+
+* At least one region exists
+* User has Tenant Admin role
+
+*Flow:*
+
+1. Navigate to Settings > Sites
+2. Click "Add Site"
+3. Select parent region
+4. Enter site details:
+   - Name (e.g., "Downtown Branch")
+   - Code (e.g., "DOWNTOWN", unique within region)
+   - Address
+   - Coordinates (optional, for mapping)
+5. Save site
+
+*Business Rules:*
+
+* Site code must be unique within the region
+* Site status can be active or inactive
+* Inactive sites do not receive orders
+
+*Acceptance Criteria:*
+
+* [ ] Site created under correct region
+* [ ] Site code uniqueness validated
+* [ ] Site appears on map if coordinates provided
+
+==== F2.3: Kitchen Management
+
+*Description:* Site managers can configure kitchens within their site.
+
+*Actors:* Site Manager, Tenant Admin
+
+*Preconditions:*
+
+* Site exists
+
+*Flow:*
+
+1. Navigate to Site > Kitchens
+2. Click "Add Kitchen"
+3. Enter kitchen details:
+   - Name (e.g., "Main Kitchen")
+   - Code (e.g., "MAIN")
+   - Type (main, express, catering)
+4. Save kitchen
+
+*Business Rules:*
+
+* Kitchen code must be unique within site
+* At least one kitchen required per site
+* Kitchen type affects order routing logic
+
+*Acceptance Criteria:*
+
+* [ ] Kitchen created under correct site
+* [ ] Kitchen visible to KOS after sync
+
+=== F3: KOS Instance Management
+
+==== F3.1: KOS Registration
+
+*Description:* Register a KOS instance for a site.
+
+*Actors:* Tenant Admin, Site Manager
+
+*Preconditions:*
+
+* Site exists with at least one kitchen
+* No KOS instance currently registered for the site
+
+*Flow:*
+
+1. Navigate to Site > KOS Instance
+2. Click "Register KOS"
+3. Enter device identifier (from KOS display)
+4. System generates API key
+5. API key displayed once (copy warning)
+6. User configures KOS with API key
+
+*Business Rules:*
+
+* One KOS instance per site
+* API key shown only once at registration
+* API key can be regenerated (invalidates old key)
+
+*Acceptance Criteria:*
+
+* [ ] API key generated and displayed
+* [ ] KOS can authenticate with API key
+* [ ] Old API key invalidated on regeneration
+
+==== F3.2: KOS Health Monitoring
+
+*Description:* View health status of KOS instances.
+
+*Actors:* All roles with site access
+
+*Preconditions:*
+
+* KOS instance registered
+
+*Flow:*
+
+1. Navigate to Fleet Dashboard
+2. View list of KOS instances with status indicators
+3. Click instance for details:
+   - Last heartbeat time
+   - KOS version
+   - Resource metrics (CPU, memory, disk)
+   - Active orders per kitchen
+
+*Status Definitions:*
+
+* *Online*: Heartbeat within last 2 minutes
+* *Degraded*: Heartbeat 2-10 minutes old
+* *Offline*: No heartbeat for 10+ minutes
+
+*Acceptance Criteria:*
+
+* [ ] Status updates in real-time (WebSocket)
+* [ ] Offline instances highlighted with warning
+* [ ] Historical uptime percentage shown
+
+=== F4: Recipe Management
+
+==== F4.1: Create Recipe
+
+*Description:* Create a new recipe with steps and ingredients.
+
+*Actors:* Recipe Manager, Recipe Editor
+
+*Preconditions:*
+
+* User has recipe creation permission
+
+*Flow:*
+
+1. Navigate to Recipes
+2. Click "New Recipe"
+3. Enter basic info:
+   - Name
+   - Description
+   - Category
+   - Tags
+   - Prep time, cook time
+   - Servings, difficulty
+4. Add steps:
+   - Instruction text
+   - Duration
+   - Equipment type (optional)
+   - Temperature (optional)
+   - Ingredients for step
+5. Save as draft
+
+*Business Rules:*
+
+* Recipe saved as "draft" by default
+* Steps must have unique sequence numbers
+* Ingredients reference ingredient master data
+
+*Acceptance Criteria:*
+
+* [ ] Recipe saved as draft
+* [ ] Steps reorderable via drag-drop
+* [ ] Ingredient autocomplete from master list
+
+==== F4.2: Publish Recipe
+
+*Description:* Publish a recipe to make it available to sites.
+
+*Actors:* Recipe Manager
+
+*Preconditions:*
+
+* Recipe is in "draft" or "review" status
+* Recipe has at least one step
+
+*Flow:*
+
+1. Open recipe in edit mode
+2. Click "Submit for Review" (if draft)
+3. Review recipe content
+4. Click "Publish"
+5. Confirm publication
+6. Select sites to assign (optional)
+
+*Business Rules:*
+
+* Publishing increments version number
+* Published recipes are immutable (edit creates new draft version)
+* Recipe available to assigned sites immediately
+
+*Acceptance Criteria:*
+
+* [ ] Version incremented on publish
+* [ ] Recipe appears in KOS sync within 5 minutes
+* [ ] Published recipe locked from direct editing
+
+==== F4.3: Assign Recipes to Sites
+
+*Description:* Control which sites can access specific recipes.
+
+*Actors:* Recipe Manager, Tenant Admin
+
+*Preconditions:*
+
+* Recipe is published
+* Sites exist
+
+*Flow:*
+
+1. Open recipe details
+2. Navigate to "Site Assignments" tab
+3. Select sites from list (grouped by region)
+4. Save assignments
+
+*Business Rules:*
+
+* Recipes can be assigned at tenant level (all sites) or specific sites
+* Unassigning a recipe removes it from site sync
+* Orders with unassigned recipes are rejected
+
+*Acceptance Criteria:*
+
+* [ ] Bulk select/deselect by region
+* [ ] Changes reflected in KOS within 5 minutes
+* [ ] Site assignment history tracked
+
+=== F5: Order Management
+
+==== F5.1: Create Order
+
+*Description:* Place an order for a specific site.
+
+*Actors:* External systems (POS), Tenant Admin, Site Manager
+
+*Preconditions:*
+
+* Valid region and site specified
+* Recipe(s) assigned to site
+
+*Flow:*
+
+1. POST to `/api/v1/orders`
+2. Include required fields:
+   - `region_id` (required)
+   - `site_id` (required)
+   - `execution_time` (when to start cooking)
+   - `items[]` with recipe_id and quantity
+3. System validates:
+   - Region/site exist and are active
+   - Recipes assigned to site
+   - Execution time is in the future
+4. Order created with "pending" status
+
+*Business Rules:*
+
+* Region and site are MANDATORY (SOP-002)
+* Execution time cannot be in the past
+* Orders rejected if recipes not assigned to site
+
+*Validation Errors:*
+
+[cols="1,2"]
+|===
+|Error Code |Description
+
+|`MISSING_REGION`
+|region_id is required
+
+|`MISSING_SITE`
+|site_id is required
+
+|`INVALID_REGION`
+|Region does not exist or is inactive
+
+|`INVALID_SITE`
+|Site does not exist or is inactive
+
+|`RECIPE_NOT_ASSIGNED`
+|Recipe {id} is not assigned to site
+
+|`INVALID_EXECUTION_TIME`
+|Execution time must be in the future
+|===
+
+*Acceptance Criteria:*
+
+* [ ] Orders without region/site rejected with 400
+* [ ] Valid orders return 201 with order ID
+* [ ] Order appears in KOS poll within 30 seconds
+
+==== F5.2: Order Polling (KOS)
+
+*Description:* KOS instances poll for orders to execute.
+
+*Actors:* KOS Instance (automated)
+
+*Preconditions:*
+
+* KOS authenticated with valid API key
+
+*Flow:*
+
+1. KOS calls `GET /api/v1/orders?site_id={site_id}&execution_within_minutes=30&status=pending,accepted`
+2. System returns orders where:
+   - Site matches
+   - Execution time within 30 minutes
+   - Status is pending or accepted
+3. KOS processes orders locally
+
+*Business Rules:*
+
+* Only return orders for authenticated site
+* Orders with execution_time > 30 minutes not returned
+* Response includes full recipe details for order items
+
+*Acceptance Criteria:*
+
+* [ ] Only site's orders returned
+* [ ] Orders sorted by execution_time ascending
+* [ ] Recipe details embedded in response
+
+==== F5.3: Order Status Updates
+
+*Description:* KOS reports order status changes to KWS.
+
+*Actors:* KOS Instance (automated)
+
+*Flow:*
+
+1. KOS calls `PATCH /api/v1/orders/{order_id}/status`
+2. Payload includes:
+   - `status`: accepted | in_progress | completed | failed
+   - `notes`: optional message
+3. System updates order and records history
+
+*Valid Status Transitions:*
+
+[mermaid]
+----
+stateDiagram-v2
+    pending --> accepted: KOS receives
+    pending --> cancelled: User cancels
+    accepted --> in_progress: Cooking starts
+    accepted --> cancelled: User cancels
+    in_progress --> completed: Done
+    in_progress --> failed: Error
+----
+
+*Acceptance Criteria:*
+
+* [ ] Invalid transitions rejected with 400
+* [ ] Status history recorded with timestamp
+* [ ] WebSocket notification sent on status change
+
+==== F5.4: Order Cancellation
+
+*Description:* Cancel an order before execution starts.
+
+*Actors:* Tenant Admin, Regional Manager, Site Manager
+
+*Preconditions:*
+
+* Order status is pending or accepted
+
+*Flow:*
+
+1. Navigate to order details
+2. Click "Cancel Order"
+3. Enter cancellation reason
+4. Confirm cancellation
+5. Order status updated to "cancelled"
+
+*Business Rules:*
+
+* Cannot cancel orders in_progress, completed, or failed
+* Cancellation reason required
+* Cancelled orders visible in history
+
+*Acceptance Criteria:*
+
+* [ ] Cancel button disabled for non-cancellable statuses
+* [ ] Reason captured in status history
+* [ ] KOS notified on next poll
+
+=== F6: User Management
+
+==== F6.1: Invite User
+
+*Description:* Invite new users to the tenant.
+
+*Actors:* Tenant Owner, Tenant Admin
+
+*Flow:*
+
+1. Navigate to Settings > Users
+2. Click "Invite User"
+3. Enter:
+   - Email address
+   - Display name
+   - Role(s) to assign
+   - Region/site assignments (for scoped roles)
+4. Send invitation
+5. User receives email with setup link
+
+*Business Rules:*
+
+* Email must be unique within tenant
+* Regional/Site managers require assignment specification
+* Invitation expires after 7 days
+
+*Acceptance Criteria:*
+
+* [ ] Invitation email sent within 1 minute
+* [ ] User can set password via link
+* [ ] Expired invitations show "Expired" status
+
+==== F6.2: Role Assignment
+
+*Description:* Assign or modify user roles.
+
+*Actors:* Tenant Owner, Tenant Admin
+
+*Flow:*
+
+1. Navigate to user details
+2. Click "Edit Roles"
+3. Select roles to assign/remove
+4. For Regional Manager: select assigned regions
+5. For Site Manager: select assigned sites
+6. Save changes
+
+*Business Rules:*
+
+* Users can have multiple roles
+* Role changes take effect immediately
+* Cannot remove own Tenant Owner role (protection)
+
+*Acceptance Criteria:*
+
+* [ ] Role changes reflected immediately
+* [ ] Active sessions updated without logout
+* [ ] Audit log records role changes
+
+=== F7: Analytics and Reporting
+
+==== F7.1: Dashboard Overview
+
+*Description:* Real-time operational dashboard.
+
+*Actors:* All authenticated users (filtered by scope)
+
+*Dashboard Components:*
+
+* *Order Summary*: Today's orders by status (pending, in progress, completed, failed)
+* *Site Health*: KOS instance status grid
+* *Recent Activity*: Latest orders and status changes
+* *Key Metrics*: Orders/hour, avg completion time, success rate
+
+*Scope Filtering:*
+
+* Tenant Admin: All data
+* Regional Manager: Assigned regions only
+* Site Manager: Assigned site only
+
+*Acceptance Criteria:*
+
+* [ ] Dashboard loads within 3 seconds
+* [ ] Data refreshes automatically (WebSocket)
+* [ ] Appropriate data filtering by role
+
+==== F7.2: Order Reports
+
+*Description:* Generate order reports with filters.
+
+*Actors:* Tenant Admin, Regional Manager, Analytics Viewer
+
+*Report Options:*
+
+* Date range
+* Region/site filter
+* Status filter
+* Group by: day, week, month, region, site
+
+*Output Formats:*
+
+* On-screen table with pagination
+* CSV export
+* PDF export
+
+*Acceptance Criteria:*
+
+* [ ] Reports generate within 10 seconds
+* [ ] CSV/PDF download works for large datasets
+* [ ] Filters persist across sessions
+
+=== F8: Ingredient Management
+
+==== F8.1: Ingredient Master Data
+
+*Description:* Manage the master list of ingredients.
+
+*Actors:* Recipe Manager
+
+*Flow:*
+
+1. Navigate to Ingredients
+2. Click "Add Ingredient"
+3. Enter:
+   - Name
+   - Category (produce, dairy, protein, etc.)
+   - Valid units (g, kg, ml, L, pieces, etc.)
+   - Allergens (if applicable)
+   - Nutrition info (optional)
+4. Save ingredient
+
+*Business Rules:*
+
+* Ingredient name unique within tenant
+* Allergens from predefined list (gluten, dairy, nuts, etc.)
+* Cannot delete ingredients used in published recipes
+
+*Acceptance Criteria:*
+
+* [ ] Autocomplete uses ingredient master in recipe editor
+* [ ] Allergen warnings shown in recipe view
+* [ ] Deletion blocked for in-use ingredients
+
+== User Interface Flows
+
+=== Login Flow
+
+[mermaid]
+----
+sequenceDiagram
+    actor User
+    participant KWS as KWS Web
+    participant KC as Keycloak
+
+    User->>KWS: Navigate to kws.example.com
+    KWS->>KC: Redirect to login
+    KC->>User: Show login form
+    User->>KC: Enter credentials
+    KC->>KC: Validate credentials
+    alt Valid credentials
+        KC->>KC: Check MFA requirement
+        alt MFA enabled
+            KC->>User: Request MFA code
+            User->>KC: Enter TOTP code
+            KC->>KC: Validate MFA
+        end
+        KC->>KWS: Redirect with auth code
+        KWS->>KC: Exchange code for tokens
+        KC->>KWS: Access + Refresh tokens
+        KWS->>User: Show dashboard
+    else Invalid credentials
+        KC->>User: Show error
+    end
+----
+
+=== Order Placement Flow
+
+[mermaid]
+----
+sequenceDiagram
+    actor POS as POS System
+    participant KWS as KWS API
+    participant DB as MongoDB
+    participant WS as WebSocket
+
+    POS->>KWS: POST /orders
+    KWS->>KWS: Validate region/site
+    KWS->>KWS: Validate recipes
+    KWS->>DB: Insert order
+    DB->>KWS: Order ID
+    KWS->>WS: Notify subscribers
+    KWS->>POS: 201 Created
+
+    Note over KWS: Within 30 seconds
+
+    loop Every 30 seconds
+        participant KOS
+        KOS->>KWS: GET /orders?site_id=X&execution_within_minutes=30
+        KWS->>DB: Query orders
+        DB->>KWS: Matching orders
+        KWS->>KOS: Order list
+        KOS->>KOS: Add to queue
+        KOS->>KWS: PATCH /orders/{id}/status (accepted)
+    end
+----
+
+=== Recipe Publication Flow
+
+[mermaid]
+----
+sequenceDiagram
+    actor Chef as Recipe Manager
+    participant KWS as KWS Web
+    participant DB as MongoDB
+
+    Chef->>KWS: Create recipe (draft)
+    KWS->>DB: Save draft
+
+    Chef->>KWS: Edit and refine
+    KWS->>DB: Update draft
+
+    Chef->>KWS: Submit for review
+    KWS->>DB: Status = review
+
+    Chef->>KWS: Publish recipe
+    KWS->>KWS: Increment version
+    KWS->>DB: Status = published
+    KWS->>Chef: Show success
+
+    Note over DB: Recipe available for KOS sync
+
+    loop Every 5 minutes
+        participant KOS
+        KOS->>KWS: GET /recipes?updated_since=timestamp
+        KWS->>DB: Query updated recipes
+        DB->>KWS: Updated recipe list
+        KWS->>KOS: Recipe data
+        KOS->>KOS: Update local cache
+    end
+----
+
+== Business Rules Summary
+
+=== Order Processing Rules
+
+[cols="1,3,1"]
+|===
+|Rule ID |Rule Description |Priority
+
+|OR-001
+|Every order MUST have region_id and site_id
+|Critical
+
+|OR-002
+|Orders are only returned to KOS if execution_time is within 30 minutes
+|Critical
+
+|OR-003
+|Orders cannot be cancelled once status is "in_progress"
+|High
+
+|OR-004
+|Order items must reference recipes assigned to the order's site
+|Critical
+
+|OR-005
+|Order priority affects queue ordering (urgent > high > normal > low)
+|Medium
+|===
+
+=== Recipe Management Rules
+
+[cols="1,3,1"]
+|===
+|Rule ID |Rule Description |Priority
+
+|RM-001
+|Recipes created/modified on KWS always override KOS local data (SOP-001)
+|Critical
+
+|RM-002
+|Published recipes are immutable; edits create new version
+|High
+
+|RM-003
+|Recipe version increments on each publication
+|High
+
+|RM-004
+|Recipes must have at least one step before publication
+|Medium
+
+|RM-005
+|Unassigning a recipe from a site prevents new orders using it
+|High
+|===
+
+=== Access Control Rules
+
+[cols="1,3,1"]
+|===
+|Rule ID |Rule Description |Priority
+
+|AC-001
+|Regional Managers can only see data for assigned regions
+|Critical
+
+|AC-002
+|Site Managers can only see data for assigned site
+|Critical
+
+|AC-003
+|Tenant data is completely isolated at database level
+|Critical
+
+|AC-004
+|API keys are scoped to a single site
+|Critical
+
+|AC-005
+|Users cannot remove their own admin privileges
+|High
+|===
+
+== Validation Rules
+
+=== Field Validations
+
+==== Tenant
+
+[cols="1,2,2"]
+|===
+|Field |Validation |Error Message
+
+|name
+|Required, 1-255 characters
+|Tenant name is required
+
+|slug
+|Required, 1-100 chars, lowercase alphanumeric + hyphens, unique
+|Slug must be unique lowercase alphanumeric
+|===
+
+==== Region
+
+[cols="1,2,2"]
+|===
+|Field |Validation |Error Message
+
+|name
+|Required, 1-255 characters
+|Region name is required
+
+|code
+|Required, 1-50 chars, uppercase, unique within tenant
+|Region code must be unique within tenant
+
+|timezone
+|Required, valid IANA timezone
+|Invalid timezone
+|===
+
+==== Site
+
+[cols="1,2,2"]
+|===
+|Field |Validation |Error Message
+
+|name
+|Required, 1-255 characters
+|Site name is required
+
+|code
+|Required, 1-50 chars, unique within region
+|Site code must be unique within region
+
+|region_id
+|Required, valid region UUID
+|Valid region is required
+|===
+
+==== Order
+
+[cols="1,2,2"]
+|===
+|Field |Validation |Error Message
+
+|region_id
+|Required, valid UUID
+|Region is required
+
+|site_id
+|Required, valid UUID, must belong to region
+|Site is required and must belong to region
+
+|execution_time
+|Required, must be in future
+|Execution time must be in the future
+
+|items
+|Required, at least one item
+|At least one order item is required
+
+|items[].recipe_id
+|Required, must be assigned to site
+|Recipe must be assigned to site
+
+|items[].quantity
+|Required, positive integer
+|Quantity must be at least 1
+|===
+
+==== Recipe
+
+[cols="1,2,2"]
+|===
+|Field |Validation |Error Message
+
+|name
+|Required, 1-255 characters
+|Recipe name is required
+
+|steps
+|At least one step required for publication
+|Recipe must have at least one step
+
+|steps[].sequence
+|Unique positive integers
+|Step sequence must be unique
+
+|steps[].instruction
+|Required, 1-2000 characters
+|Step instruction is required
+|===
+
+== Error Handling
+
+=== Standard Error Response
+
+[source,json]
+----
+{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable message",
+    "details": [
+      {
+        "field": "field_name",
+        "message": "Field-specific error"
+      }
+    ]
+  },
+  "meta": {
+    "request_id": "uuid",
+    "timestamp": "ISO8601"
+  }
+}
+----
+
+=== Common Error Codes
+
+[cols="1,1,2"]
+|===
+|HTTP Status |Error Code |Description
+
+|400
+|VALIDATION_ERROR
+|Request validation failed
+
+|401
+|UNAUTHORIZED
+|Authentication required
+
+|403
+|FORBIDDEN
+|Permission denied
+
+|404
+|NOT_FOUND
+|Resource not found
+
+|409
+|CONFLICT
+|Resource conflict (e.g., duplicate)
+
+|422
+|BUSINESS_RULE_VIOLATION
+|Business rule prevents action
+
+|429
+|RATE_LIMITED
+|Too many requests
+
+|500
+|INTERNAL_ERROR
+|Unexpected server error
+|===
+
+== Appendix A: Glossary
+
+[cols="1,3"]
+|===
+|Term |Definition
+
+|Tenant
+|Customer organization using KWS platform
+
+|Region
+|Geographic area containing one or more sites (e.g., "Sacramento Metro")
+
+|Site
+|Physical location with one KOS deployment (e.g., "Downtown Branch")
+
+|Kitchen
+|Individual cooking station managed by KOS (e.g., "Main Kitchen", "Express Line")
+
+|KOS Instance
+|A KOS deployment at a specific site
+
+|Recipe
+|Complete cooking instructions managed in KWS
+
+|Execution Time
+|Scheduled time for order cooking to begin
+
+|API Key
+|Long-lived credential for KOS authentication
+|===
+
+== Appendix B: SOP Reference
+
+[cols="1,3"]
+|===
+|SOP ID |Description
+
+|SOP-001
+|Recipe Authority: KWS is single source of truth. Recipes on KWS always override KOS local data.
+
+|SOP-002
+|Order Routing: Every order must specify region and site. Orders without these are rejected.
+|===
+
+== Document Control
+
+[cols="1,1,1,2"]
+|===
+|Version |Date |Author |Changes
+
+|1.0
+|Dec 2024
+|KOS Team
+|Initial functional specification with user roles, feature specs, UI flows, and business rules
+|===
+
+---
+
+_This document should be read in conjunction with the KWS Requirements Document and KWS Technical Design Document._

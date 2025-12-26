@@ -1,0 +1,187 @@
+{{define "title"}}Orders - KWS{{end}}
+{{define "page-title"}}Orders{{end}}
+
+{{define "content"}}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <p class="text-gray-500 dark:text-gray-400">Track orders across all sites</p>
+        </div>
+        <button onclick="openCreateModal()"
+                class="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors">
+            <span class="material-icons-outlined mr-2">add</span>
+            Create Order
+        </button>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">Pending</p>
+                    <p class="text-2xl font-bold text-yellow-600">{{.Stats.Pending}}</p>
+                </div>
+                <span class="material-icons-outlined text-2xl text-yellow-600">pending</span>
+            </div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">In Progress</p>
+                    <p class="text-2xl font-bold text-blue-600">{{.Stats.InProgress}}</p>
+                </div>
+                <span class="material-icons-outlined text-2xl text-blue-600">sync</span>
+            </div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">Completed Today</p>
+                    <p class="text-2xl font-bold text-green-600">{{.Stats.Completed}}</p>
+                </div>
+                <span class="material-icons-outlined text-2xl text-green-600">check_circle</span>
+            </div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">Failed</p>
+                    <p class="text-2xl font-bold text-red-600">{{.Stats.Failed}}</p>
+                </div>
+                <span class="material-icons-outlined text-2xl text-red-600">error</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+        <div class="flex items-center space-x-4">
+            <div class="flex-1">
+                <input type="text" id="search-input" placeholder="Search by order reference..."
+                       class="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+            </div>
+            <select name="status"
+                    class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm">
+                <option value="">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="sent_to_kos">Sent to KOS</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+                <option value="failed">Failed</option>
+                <option value="cancelled">Cancelled</option>
+            </select>
+            <select name="site"
+                    class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm">
+                <option value="">All Sites</option>
+                {{range .Sites}}
+                <option value="{{.ID}}">{{.Name}}</option>
+                {{end}}
+            </select>
+        </div>
+    </div>
+
+    <!-- Orders Table -->
+    <div id="orders-table" class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead class="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Order</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Site</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Items</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Priority</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Created</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                {{range .Orders}}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div>
+                            <div class="text-sm font-medium text-gray-900 dark:text-white">{{.OrderReference}}</div>
+                            {{if .CustomerName}}
+                            <div class="text-sm text-gray-500">{{.CustomerName}}</div>
+                            {{end}}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm text-gray-900 dark:text-white">{{.SiteName}}</div>
+                        <div class="text-sm text-gray-500">{{.RegionName}}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="text-sm text-gray-900 dark:text-white">{{len .Items}} items</span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 py-1 text-xs font-medium rounded-full
+                            {{if eq .Status "completed"}}bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300
+                            {{else if eq .Status "pending"}}bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300
+                            {{else if eq .Status "in_progress"}}bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300
+                            {{else if eq .Status "sent_to_kos"}}bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300
+                            {{else if eq .Status "failed"}}bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300
+                            {{else if eq .Status "cancelled"}}bg-gray-100 text-gray-700 dark:bg-gray-600 dark:text-gray-300
+                            {{else}}bg-gray-100 text-gray-700{{end}}">
+                            {{.Status}}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            {{range $i := iterate .Priority}}
+                            <span class="material-icons-outlined text-sm text-yellow-500">star</span>
+                            {{end}}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {{.CreatedAt}}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div class="flex items-center justify-end space-x-2">
+                            <a href="/orders/{{.ID}}"
+                               class="p-2 text-gray-500 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                                <span class="material-icons-outlined text-lg">visibility</span>
+                            </a>
+                            {{if eq .Status "pending"}}
+                            <button onclick="cancelOrder('{{.ID}}')"
+                                    class="p-2 text-gray-500 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                                <span class="material-icons-outlined text-lg">cancel</span>
+                            </button>
+                            {{end}}
+                        </div>
+                    </td>
+                </tr>
+                {{else}}
+                <tr>
+                    <td colspan="7" class="px-6 py-12 text-center">
+                        <span class="material-icons-outlined text-4xl text-gray-400 mb-2">receipt_long</span>
+                        <p class="text-gray-500 dark:text-gray-400">No orders found</p>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{{end}}
+
+{{define "scripts"}}
+<script>
+function openCreateModal() {
+    window.location.href = '/orders/new';
+}
+
+function cancelOrder(id) {
+    const reason = prompt('Reason for cancellation:');
+    if (reason !== null) {
+        htmx.ajax('POST', '/api/v1/orders/' + id + '/cancel', {
+            values: { reason: reason },
+            swap: 'none'
+        }).then(() => {
+            window.location.reload();
+        });
+    }
+}
+</script>
+{{end}}

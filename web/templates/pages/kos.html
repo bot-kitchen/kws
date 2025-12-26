@@ -1,0 +1,164 @@
+{{define "title"}}KOS Instances - KWS{{end}}
+{{define "page-title"}}KOS Instances{{end}}
+
+{{define "content"}}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <p class="text-gray-500 dark:text-gray-400">Manage Kitchen Operating System instances across sites</p>
+        </div>
+        <button onclick="openCreateModal()"
+                class="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors">
+            <span class="material-icons-outlined mr-2">add</span>
+            Register KOS
+        </button>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+        <div class="flex items-center space-x-4">
+            <div class="flex-1">
+                <input type="text" id="search-input" placeholder="Search KOS instances..."
+                       class="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+            </div>
+            <select name="status"
+                    class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm">
+                <option value="">All Status</option>
+                <option value="online">Online</option>
+                <option value="offline">Offline</option>
+                <option value="pending">Pending</option>
+                <option value="maintenance">Maintenance</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- KOS Grid -->
+    <div id="kos-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {{range .KOSInstances}}
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div class="flex items-start justify-between mb-4">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 rounded-lg flex items-center justify-center
+                        {{if eq .Status "online"}}bg-green-100 dark:bg-green-900/50
+                        {{else if eq .Status "offline"}}bg-red-100 dark:bg-red-900/50
+                        {{else}}bg-gray-100 dark:bg-gray-700{{end}}">
+                        <span class="material-icons-outlined text-2xl
+                            {{if eq .Status "online"}}text-green-600 dark:text-green-400
+                            {{else if eq .Status "offline"}}text-red-600 dark:text-red-400
+                            {{else}}text-gray-600 dark:text-gray-400{{end}}">
+                            {{if eq .Status "online"}}cloud_done{{else if eq .Status "offline"}}cloud_off{{else}}cloud_queue{{end}}
+                        </span>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="font-semibold text-gray-900 dark:text-white">{{.Name}}</h3>
+                        <p class="text-sm text-gray-500">{{.SiteName}}</p>
+                    </div>
+                </div>
+                <span class="px-2 py-1 text-xs font-medium rounded-full
+                    {{if eq .Status "online"}}bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300
+                    {{else if eq .Status "offline"}}bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300
+                    {{else if eq .Status "pending"}}bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300
+                    {{else}}bg-gray-100 text-gray-700 dark:bg-gray-600 dark:text-gray-300{{end}}">
+                    {{.Status}}
+                </span>
+            </div>
+
+            <div class="space-y-3 mb-4">
+                <div class="flex items-center justify-between text-sm">
+                    <span class="text-gray-500">Version</span>
+                    <span class="text-gray-900 dark:text-white">{{if .Version}}{{.Version}}{{else}}—{{end}}</span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                    <span class="text-gray-500">Last Heartbeat</span>
+                    <span class="text-gray-900 dark:text-white">{{if .LastHeartbeat}}{{.LastHeartbeat}}{{else}}Never{{end}}</span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                    <span class="text-gray-500">Kitchens</span>
+                    <span class="text-gray-900 dark:text-white">{{len .Kitchens}}</span>
+                </div>
+            </div>
+
+            {{if eq .Status "online"}}
+            <div class="grid grid-cols-3 gap-3 mb-4">
+                <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2 text-center">
+                    <p class="text-xs text-gray-500">CPU</p>
+                    <p class="text-sm font-medium text-gray-900 dark:text-white">{{.CPUPercent}}%</p>
+                </div>
+                <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2 text-center">
+                    <p class="text-xs text-gray-500">Memory</p>
+                    <p class="text-sm font-medium text-gray-900 dark:text-white">{{.MemoryPercent}}%</p>
+                </div>
+                <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2 text-center">
+                    <p class="text-xs text-gray-500">Orders</p>
+                    <p class="text-sm font-medium text-gray-900 dark:text-white">{{.ActiveOrders}}</p>
+                </div>
+            </div>
+            {{end}}
+
+            <div class="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div class="flex items-center space-x-2">
+                    <a href="/kos/{{.ID}}"
+                       class="p-2 text-gray-500 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                        <span class="material-icons-outlined text-lg">visibility</span>
+                    </a>
+                    <button onclick="openEditModal('{{.ID}}')"
+                            class="p-2 text-gray-500 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                        <span class="material-icons-outlined text-lg">edit</span>
+                    </button>
+                </div>
+                {{if eq .Status "pending"}}
+                <button onclick="provisionKOS('{{.ID}}')"
+                        class="px-3 py-1 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700">
+                    Provision
+                </button>
+                {{else if eq .Status "provisioned"}}
+                <button onclick="downloadCerts('{{.ID}}')"
+                        class="px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700">
+                    Download Certs
+                </button>
+                {{end}}
+            </div>
+        </div>
+        {{else}}
+        <div class="col-span-full text-center py-12">
+            <span class="material-icons-outlined text-6xl text-gray-400 mb-4">devices</span>
+            <p class="text-gray-500 dark:text-gray-400 mb-4">No KOS instances registered</p>
+            <button onclick="openCreateModal()"
+                    class="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
+                <span class="material-icons-outlined mr-2">add</span>
+                Register your first KOS
+            </button>
+        </div>
+        {{end}}
+    </div>
+</div>
+
+{{end}}
+
+{{define "scripts"}}
+<script>
+function openCreateModal() {
+    window.location.href = '/kos/new';
+}
+
+function openEditModal(id) {
+    window.location.href = '/kos/' + id + '/edit';
+}
+
+function provisionKOS(id) {
+    if (confirm('Provision certificates for this KOS instance?')) {
+        htmx.ajax('POST', '/api/v1/kos/' + id + '/provision', {
+            swap: 'none'
+        }).then(response => {
+            showToast('success', 'KOS provisioned successfully');
+            window.location.reload();
+        });
+    }
+}
+
+function downloadCerts(id) {
+    window.location.href = '/api/v1/kos/' + id + '/certificates';
+}
+</script>
+{{end}}

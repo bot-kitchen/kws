@@ -1,0 +1,52 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go build artifacts
+*.test
+*.out
+go.work
+
+# IDE and editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Config files with secrets (only config.prod.yaml is committed)
+config/config.yaml
+config/config.local.yaml
+config/*.local.*
+*.env
+.env.*
+
+# Logs
+*.log
+logs/
+
+# Temp files
+tmp/
+temp/
+
+# Certificates (keep examples, ignore real certs)
+*.pem
+*.key
+*.crt
+!*.example.pem
+!*.example.key
+!*.example.crt
+
+# MongoDB data (for local development)
+data/
+
+# Docker volumes
+volumes/
