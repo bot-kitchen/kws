@@ -20,7 +20,7 @@ const themeColors = {
 };
 
 module.exports = {
-  content: ["./web/templates/**/*.html"],
+  content: ["./web/templates/**/*.html", "./web/static/js/**/*.js"],
   darkMode: "class",
   plugins: [
     require("@tailwindcss/forms"),

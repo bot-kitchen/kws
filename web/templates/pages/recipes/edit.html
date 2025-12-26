@@ -1,13 +1,185 @@
-{{define "title"}}Edit Recipe - KWS{{end}}
-{{define "page-title"}}Edit Recipe{{end}}
-
-{{define "content"}}
-<div class="space-y-6">
-    <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-12 text-center">
-        <span class="material-symbols-outlined text-4xl text-gray-400 mb-4">menu_book</span>
-        <p class="text-gray-500 dark:text-text-secondary">Recipe edit form coming soon</p>
+{{define "recipes-form"}}
+<div class="max-w-4xl mx-auto">
+    <!-- Page Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl md:text-4xl font-bold tracking-tight mb-2">
+            {{if .Recipe.ID}}Edit{{else}}Create{{end}} Recipe
+        </h1>
+        <p class="text-gray-500 dark:text-text-secondary text-sm md:text-base">
+            {{if .Recipe.ID}}Update recipe details and settings{{else}}Add a new recipe to your collection{{end}}
+        </p>
     </div>
+
+    <!-- Form Card -->
+    <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-6 md:p-8">
+        <form id="recipe-form">
+            {{if .Recipe.ID}}
+            <input type="hidden" name="id" value="{{.Recipe.ID}}">
+            {{end}}
+
+            <div class="mb-6">
+                <h2 class="flex items-center gap-2 text-xl font-semibold mb-6 text-gray-900 dark:text-white">
+                    <span class="material-symbols-outlined text-primary">menu_book</span>
+                    Recipe Details
+                </h2>
+
+                <div class="mb-6">
+                    <label for="name" class="flex items-center gap-2 mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                        <span class="material-symbols-outlined text-sm text-gray-500 dark:text-text-secondary">label</span>
+                        Recipe Name <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" id="name" name="name" value="{{.Recipe.Name}}"
+                           class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                           required placeholder="e.g., Spaghetti Carbonara">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="estimated_prep_time_sec" class="flex items-center gap-2 mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            <span class="material-symbols-outlined text-sm text-gray-500 dark:text-text-secondary">schedule</span>
+                            Prep Time (minutes) <span class="text-red-500">*</span>
+                        </label>
+                        <input type="number" id="estimated_prep_time_sec" name="estimated_prep_time_sec"
+                               value="{{divFloat .Recipe.EstimatedPrepTimeSec 60 | printf "%.0f"}}"
+                               class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                               required min="0" step="1" placeholder="15">
+                    </div>
+
+                    <div>
+                        <label for="estimated_cooking_time_sec" class="flex items-center gap-2 mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            <span class="material-symbols-outlined text-sm text-gray-500 dark:text-text-secondary">local_fire_department</span>
+                            Cooking Time (minutes) <span class="text-red-500">*</span>
+                        </label>
+                        <input type="number" id="estimated_cooking_time_sec" name="estimated_cooking_time_sec"
+                               value="{{divFloat .Recipe.EstimatedCookingTimeSec 60 | printf "%.0f"}}"
+                               class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                               required min="0" step="1" placeholder="20">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recipe Steps Section -->
+            <div class="mt-8 pt-6 border-t border-gray-200 dark:border-border-dark">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="flex items-center gap-2 text-xl font-semibold text-gray-900 dark:text-white">
+                        <span class="material-symbols-outlined text-primary">format_list_numbered</span>
+                        Recipe Steps
+                    </h2>
+                    <div class="flex gap-2">
+                        <button type="button" id="add-ingredient-btn"
+                                class="flex items-center gap-2 rounded-lg bg-green-600 hover:bg-green-700 text-white px-4 py-2 text-sm font-bold transition-all shadow-[0_0_10px_rgba(34,197,94,0.2)]">
+                            <span class="material-symbols-outlined text-lg">inventory_2</span>
+                            <span>Add Ingredient</span>
+                        </button>
+                        <button type="button" id="add-step-btn"
+                                class="flex items-center gap-2 rounded-lg bg-primary hover:bg-primary/90 text-white px-4 py-2 text-sm font-bold transition-all shadow-[0_0_10px_rgba(110,86,207,0.2)]">
+                            <span class="material-symbols-outlined text-lg">add</span>
+                            <span>Add Step</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Steps List Container -->
+                <div id="steps-container" class="space-y-4 mb-6">
+                    <div id="no-steps-message" class="text-center py-8 text-gray-500 dark:text-text-secondary">
+                        <span class="material-symbols-outlined text-4xl mb-2 block text-gray-400">format_list_numbered</span>
+                        <p>No steps added yet. Click "Add Ingredient" to add a solid ingredient or "Add Step" for other actions.</p>
+                    </div>
+                </div>
+
+                <!-- Add Step Buttons (Bottom) -->
+                <div class="flex gap-2 mb-6">
+                    <button type="button" id="add-ingredient-btn-bottom"
+                            class="flex items-center gap-2 rounded-lg bg-green-600 hover:bg-green-700 text-white px-4 py-2 text-sm font-bold transition-all shadow-[0_0_10px_rgba(34,197,94,0.2)]">
+                        <span class="material-symbols-outlined text-lg">inventory_2</span>
+                        <span>Add Ingredient</span>
+                    </button>
+                    <button type="button" id="add-step-btn-bottom"
+                            class="flex items-center gap-2 rounded-lg bg-primary hover:bg-primary/90 text-white px-4 py-2 text-sm font-bold transition-all shadow-[0_0_10px_rgba(110,86,207,0.2)]">
+                        <span class="material-symbols-outlined text-lg">add</span>
+                        <span>Add Step</span>
+                    </button>
+                </div>
+
+                <!-- DAG Visualization -->
+                <div id="dag-section" class="hidden mt-8 bg-gray-50 dark:bg-surface-highlight border border-gray-200 dark:border-border-dark rounded-xl p-6">
+                    <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-primary">account_tree</span>
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Steps Dependency Graph</h3>
+                        </div>
+                        <!-- Legend -->
+                        <div class="flex flex-wrap gap-3 text-xs text-text-secondary">
+                            <div class="flex items-center gap-1.5">
+                                <div class="w-2.5 h-2.5 rounded-full bg-gray-500"></div>
+                                <span>System</span>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <div class="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
+                                <span>Liquid</span>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <div class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
+                                <span>Ingredient</span>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+                                <span>Heat</span>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+                                <span>Agitate</span>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <div class="w-2.5 h-2.5 rounded-full bg-purple-500"></div>
+                                <span>Lid</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="dag-wrapper" class="relative bg-white dark:bg-surface-dark rounded-lg p-4 min-h-[200px]">
+                        <svg id="arrows-svg" class="absolute inset-0 w-full h-full pointer-events-none" style="z-index: 1;"></svg>
+                        <div id="dag-container" class="relative" style="z-index: 2;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="result" class="mb-4"></div>
+
+            <!-- Add bottom padding to prevent content from being hidden behind floating buttons -->
+            <div class="pb-24"></div>
+        </form>
+
+        <!-- Floating Action Buttons -->
+        <div class="fixed bottom-0 left-0 right-0 z-50 bg-background-light dark:bg-background-dark border-t border-gray-200 dark:border-border-dark shadow-lg backdrop-blur-sm bg-opacity-95 dark:bg-opacity-95">
+            <div class="container mx-auto px-4 py-4">
+                <div class="flex flex-col sm:flex-row gap-3 max-w-7xl mx-auto">
+                    <button type="submit" form="recipe-form"
+                            class="flex items-center justify-center gap-2 rounded-lg bg-primary hover:bg-primary/90 text-white px-6 py-3 text-sm font-bold transition-all shadow-[0_0_10px_rgba(110,86,207,0.3)]">
+                        <span class="material-symbols-outlined text-xl">{{if .Recipe.ID}}check{{else}}add{{end}}</span>
+                        <span>{{if .Recipe.ID}}Update{{else}}Create{{end}} Recipe</span>
+                    </button>
+                    <a href="/recipes"
+                       class="flex items-center justify-center gap-2 rounded-lg bg-gray-100 dark:bg-surface-highlight hover:bg-gray-200 dark:hover:bg-border-dark text-gray-700 dark:text-white px-6 py-3 text-sm font-medium transition-colors">
+                        <span class="material-symbols-outlined text-xl">close</span>
+                        <span>Cancel</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Initialize recipe steps if editing -->
+    {{if .Recipe.ID}}
+    <script>
+        // Pass existing recipe steps to JavaScript
+        window.existingRecipeSteps = {{.Recipe.RecipeSteps | json}};
+        window.existingIngredients = {{.Ingredients | json}};
+    </script>
+    {{else}}
+    <script>
+        window.existingRecipeSteps = [];
+        window.existingIngredients = {{.Ingredients | json}};
+    </script>
+    {{end}}
 </div>
 {{end}}
-
-{{define "scripts"}}{{end}}

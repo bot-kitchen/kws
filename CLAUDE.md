@@ -183,3 +183,69 @@ Comprehensive documentation in `docs/`:
 | SOP-001 | Recipe Authority: KWS is single source of truth. Recipe version increases trigger full re-sync. |
 | SOP-002 | Order Routing: Every order must specify region and site. Single recipe per order. |
 | SOP-003 | KOS Identity: Auto-generated UUID stored in database. mTLS for authentication. |
+
+## Web UI Parity with KOS
+
+KWS web UI maintains feature parity with KOS for Operations pages. When modifying web UI components, ensure changes are kept in sync between both projects.
+
+### Shared Components (keep in sync)
+| Component | KOS Path | KWS Path |
+|-----------|----------|----------|
+| Recipe Steps JS | `web/static/js/recipe-steps.js` | `web/static/js/recipe-steps.js` |
+| Recipe Actions JS | `web/static/js/recipe-actions.js` | `web/static/js/recipe-actions.js` |
+| Tailwind Config | `tailwind.config.js` | `tailwind.config.js` |
+| Theme colors | Linear.app violet theme | Same theme |
+| Icon font | Material Symbols Outlined | Same |
+
+### Template System
+Both projects use the same Go html/template structure with named templates:
+- Templates use `{{define "template-name"}}` pattern (e.g., `{{define "recipes-list"}}`)
+- `renderTemplate()` function dynamically wraps page templates as `{{template "content" .}}`
+- Layouts parsed first, then pages (sorted alphabetically)
+- Template functions defined in `templateFuncMap()` must match between projects
+
+### Template Directory Structure
+```
+web/templates/
+├── layouts/
+│   ├── base.html      # Main layout with {{template "content" .}}
+│   ├── head.html      # JS/CSS dependencies
+│   ├── header.html    # Top navigation
+│   └── sidebar.html   # Side navigation
+└── pages/
+    ├── dashboard/index.html
+    ├── recipes/list.html, view.html, form.html
+    ├── ingredients/list.html
+    └── orders/list.html, view.html, form.html
+```
+
+### Template Functions (must match KOS)
+- `divFloat` - Divide two numbers as floats
+- `add` - Add two numbers
+- `json` - Marshal value to JSON for JavaScript
+- `replace` - String replacement
+- `title` - Title case string
+- `split` - Split string by separator
+- `formatTimeAgo` - Relative time formatting
+- `deref` - Dereference pointer
+
+### KWS-specific Additions
+| Feature | KOS | KWS |
+|---------|-----|-----|
+| Multi-tenancy | Single tenant | Tenant selector, session-based context |
+| Site selection | N/A (single site) | Required for orders (route to which KOS) |
+| KOS instance list | N/A | KOS instances management page |
+| Auth layout | N/A | `layouts/auth.html` for login |
+
+### When Porting Templates from KOS
+1. Copy template file preserving `{{define "template-name"}}` pattern
+2. Add tenant context checks where needed (use `middleware.GetEffectiveTenantID`)
+3. Update API endpoints if different
+4. Add site selector for order creation
+5. Run `make css` to regenerate Tailwind CSS
+
+### Data Differences
+- **KOS**: Steps stored in separate `recipe_steps` table
+- **KWS**: Steps embedded in Recipe document (`recipe.Steps` array)
+- **KOS**: Uses `DependsOn`, `DurationSec`, `Instructions` fields
+- **KWS**: Uses `DependsOnSteps`, `Name`, `Description` fields

@@ -1,11 +1,14 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io/fs"
 	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ak/kws/internal/app/middleware"
@@ -15,17 +18,70 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// Template cache (matching KOS pattern)
+var templates *template.Template
+
 // WebHandlers handles web UI requests
 type WebHandlers struct {
-	baseTemplates *template.Template
-	pageTemplates map[string]*template.Template
 	handlers      *Handlers
 	sessionConfig middleware.SessionConfig
 }
 
-// templateFuncMap returns the common template functions
+// templateFuncMap returns the common template functions (matching KOS)
 func templateFuncMap() template.FuncMap {
 	return template.FuncMap{
+		"divFloat": func(a, b interface{}) float64 {
+			aVal, _ := strconv.ParseFloat(fmt.Sprint(a), 64)
+			bVal, _ := strconv.ParseFloat(fmt.Sprint(b), 64)
+			if bVal == 0 {
+				return 0
+			}
+			return aVal / bVal
+		},
+		"add": func(a, b interface{}) int {
+			aVal, _ := strconv.Atoi(fmt.Sprint(a))
+			bVal, _ := strconv.Atoi(fmt.Sprint(b))
+			return aVal + bVal
+		},
+		"json": func(v interface{}) template.JS {
+			b, err := json.Marshal(v)
+			if err != nil {
+				return template.JS("[]")
+			}
+			return template.JS(b)
+		},
+		"replace": func(old, new, s string) string {
+			return strings.ReplaceAll(s, old, new)
+		},
+		"title": func(s string) string {
+			return strings.Title(s)
+		},
+		"split": func(s, sep string) []string {
+			if s == "" {
+				return []string{}
+			}
+			return strings.Split(s, sep)
+		},
+		"formatTimeAgo": func(t *time.Time) string {
+			if t == nil {
+				return "N/A"
+			}
+			duration := time.Since(*t)
+			if duration < time.Minute {
+				return fmt.Sprintf("%ds", int(duration.Seconds()))
+			} else if duration < time.Hour {
+				return fmt.Sprintf("%dm", int(duration.Minutes()))
+			} else if duration < 24*time.Hour {
+				return fmt.Sprintf("%dh", int(duration.Hours()))
+			}
+			return fmt.Sprintf("%dd", int(duration.Hours()/24))
+		},
+		"deref": func(p *int) int {
+			if p == nil {
+				return 0
+			}
+			return *p
+		},
 		"dict": func(values ...interface{}) map[string]interface{} {
 			if len(values)%2 != 0 {
 				return nil
@@ -41,7 +97,6 @@ func templateFuncMap() template.FuncMap {
 			return dict
 		},
 		"eq": func(a, b interface{}) bool {
-			// Handle nil cases - nil is never equal to a non-nil value
 			if a == nil && b == nil {
 				return true
 			}
@@ -58,9 +113,6 @@ func templateFuncMap() template.FuncMap {
 		},
 		"lt": func(a, b int) bool {
 			return a < b
-		},
-		"add": func(a, b int) int {
-			return a + b
 		},
 		"sub": func(a, b int) int {
 			return a - b
@@ -106,78 +158,83 @@ func templateFuncMap() template.FuncMap {
 			}
 			if diff < 24*time.Hour {
 				hours := int(diff.Hours())
-				return template.HTMLEscapeString(string(rune(hours))) + "h ago"
+				return fmt.Sprintf("%dh ago", hours)
 			}
 			days := int(diff.Hours() / 24)
 			if days == 1 {
 				return "yesterday"
 			}
 			if days < 7 {
-				return template.HTMLEscapeString(string(rune(days))) + "d ago"
+				return fmt.Sprintf("%dd ago", days)
 			}
 			return t.Format("Jan 02")
 		},
 	}
 }
 
-// NewWebHandlers creates a new web handlers instance
-func NewWebHandlers(handlers *Handlers, sessionConfig middleware.SessionConfig) (*WebHandlers, error) {
+// initTemplates initializes the template cache (matching KOS pattern)
+func initTemplates() error {
 	funcMap := templateFuncMap()
 	templatesFS := web.Templates()
 
-	// Parse base/layout templates first
-	baseTemplates := template.New("").Funcs(funcMap)
+	// Create base template with custom functions
+	tmpl := template.New("").Funcs(funcMap)
 
-	// Parse layouts
-	layoutFiles := []string{"layouts/base.html", "layouts/auth.html", "layouts/sidebar.html", "layouts/header.html"}
-	for _, layoutFile := range layoutFiles {
-		content, err := fs.ReadFile(templatesFS, layoutFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read layout %s: %w", layoutFile, err)
-		}
-		_, err = baseTemplates.New(layoutFile).Parse(string(content))
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse layout %s: %w", layoutFile, err)
-		}
-	}
-
-	// Create page-specific templates by cloning base and adding page content
-	pageTemplates := make(map[string]*template.Template)
-
-	err := fs.WalkDir(templatesFS, "pages", func(path string, d fs.DirEntry, err error) error {
+	// Collect all template files
+	var templateFiles []string
+	err := fs.WalkDir(templatesFS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() {
-			return nil
+		if !d.IsDir() && strings.HasSuffix(path, ".html") {
+			templateFiles = append(templateFiles, path)
 		}
-
-		// Clone the base templates
-		pageTemplate, err := baseTemplates.Clone()
-		if err != nil {
-			return fmt.Errorf("failed to clone base templates for %s: %w", path, err)
-		}
-
-		// Parse the page template into the clone
-		content, err := fs.ReadFile(templatesFS, path)
-		if err != nil {
-			return fmt.Errorf("failed to read page %s: %w", path, err)
-		}
-		_, err = pageTemplate.New(path).Parse(string(content))
-		if err != nil {
-			return fmt.Errorf("failed to parse page %s: %w", path, err)
-		}
-
-		pageTemplates[path] = pageTemplate
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return err
+	}
+
+	// Sort files to ensure layouts are parsed first
+	sort.Slice(templateFiles, func(i, j int) bool {
+		// Layouts come first
+		iLayout := strings.HasPrefix(templateFiles[i], "layouts/")
+		jLayout := strings.HasPrefix(templateFiles[j], "layouts/")
+		if iLayout && !jLayout {
+			return true
+		}
+		if !iLayout && jLayout {
+			return false
+		}
+		return templateFiles[i] < templateFiles[j]
+	})
+
+	// Parse all template files
+	for _, path := range templateFiles {
+		content, readErr := fs.ReadFile(templatesFS, path)
+		if readErr != nil {
+			return fmt.Errorf("error reading template %s: %w", path, readErr)
+		}
+		_, parseErr := tmpl.Parse(string(content))
+		if parseErr != nil {
+			return fmt.Errorf("error parsing template %s: %w", path, parseErr)
+		}
+	}
+
+	templates = tmpl
+	return nil
+}
+
+// NewWebHandlers creates a new web handlers instance
+func NewWebHandlers(handlers *Handlers, sessionConfig middleware.SessionConfig) (*WebHandlers, error) {
+	// Initialize templates if not already done
+	if templates == nil {
+		if err := initTemplates(); err != nil {
+			return nil, fmt.Errorf("failed to initialize templates: %w", err)
+		}
 	}
 
 	return &WebHandlers{
-		baseTemplates: baseTemplates,
-		pageTemplates: pageTemplates,
 		handlers:      handlers,
 		sessionConfig: sessionConfig,
 	}, nil
@@ -222,10 +279,14 @@ func (w *WebHandlers) RegisterRoutes(r *gin.Engine) {
 	}
 }
 
-func (w *WebHandlers) render(c *gin.Context, page string, data gin.H) {
+// renderTemplate renders a named template with the given data (matching KOS pattern)
+func (w *WebHandlers) renderTemplate(c *gin.Context, tmplName string, data gin.H) {
 	if data == nil {
 		data = gin.H{}
 	}
+
+	// Add common data available to all templates
+	data["AppName"] = "KWS"
 
 	// Add user info to all templates
 	if user := middleware.GetUser(c); user != nil {
@@ -243,9 +304,7 @@ func (w *WebHandlers) render(c *gin.Context, page string, data gin.H) {
 			"Name": t.Name,
 		})
 	}
-	// Use AllTenants for tenant selector to avoid conflict with page-specific Tenants data
 	data["AllTenants"] = tenantSelectorList
-	// Only set TenantCount if not already set by the page handler
 	if _, exists := data["TenantCount"]; !exists {
 		data["TenantCount"] = len(allTenants)
 	}
@@ -253,7 +312,6 @@ func (w *WebHandlers) render(c *gin.Context, page string, data gin.H) {
 	// Get selected tenant from session
 	if selectedID := middleware.GetEffectiveTenantID(c); selectedID != "" {
 		data["SelectedTenantID"] = selectedID
-		// Find selected tenant name
 		for _, t := range tenantSelectorList {
 			if t["ID"] == selectedID {
 				data["SelectedTenantName"] = t["Name"]
@@ -265,15 +323,26 @@ func (w *WebHandlers) render(c *gin.Context, page string, data gin.H) {
 
 	c.Header("Content-Type", "text/html; charset=utf-8")
 
-	// Get the page-specific template (which includes base layout with page blocks)
-	pageTemplate, ok := w.pageTemplates[page]
-	if !ok {
-		c.String(http.StatusInternalServerError, "Template not found: %s", page)
+	// Check if the page template exists
+	pageTemplate := templates.Lookup(tmplName)
+	if pageTemplate == nil {
+		c.String(http.StatusInternalServerError, "Template not found: %s", tmplName)
 		return
 	}
 
-	// Execute the base layout which will use the page's block definitions
-	if err := pageTemplate.ExecuteTemplate(c.Writer, "layouts/base.html", data); err != nil {
+	// Create a wrapper that defines "content" as the page template (KOS pattern)
+	funcMap := templateFuncMap()
+	contentWrapper := template.Must(template.New("content").Funcs(funcMap).Parse(`{{template "` + tmplName + `" .}}`))
+
+	// Add all templates to the wrapper
+	for _, t := range templates.Templates() {
+		if t.Name() != "content" {
+			contentWrapper.AddParseTree(t.Name(), t.Tree)
+		}
+	}
+
+	// Execute the base template with the wrapper
+	if err := contentWrapper.ExecuteTemplate(c.Writer, "base", data); err != nil {
 		c.String(http.StatusInternalServerError, "Template error: %v", err)
 	}
 }
@@ -284,16 +353,27 @@ func (w *WebHandlers) renderAuth(c *gin.Context, data gin.H) {
 		data = gin.H{}
 	}
 
+	data["AppName"] = "KWS"
+
 	c.Header("Content-Type", "text/html; charset=utf-8")
 
-	// Use the login page template which has the auth layout
-	pageTemplate, ok := w.pageTemplates["pages/login.html"]
-	if !ok {
+	// Check if the auth-login template exists
+	if templates.Lookup("auth-login") == nil {
 		c.String(http.StatusInternalServerError, "Login template not found")
 		return
 	}
 
-	if err := pageTemplate.ExecuteTemplate(c.Writer, "layouts/auth.html", data); err != nil {
+	// Create wrapper for auth layout
+	funcMap := templateFuncMap()
+	contentWrapper := template.Must(template.New("content").Funcs(funcMap).Parse(`{{template "auth-login" .}}`))
+
+	for _, t := range templates.Templates() {
+		if t.Name() != "content" {
+			contentWrapper.AddParseTree(t.Name(), t.Tree)
+		}
+	}
+
+	if err := contentWrapper.ExecuteTemplate(c.Writer, "auth", data); err != nil {
 		c.String(http.StatusInternalServerError, "Template error: %v", err)
 	}
 }
@@ -513,7 +593,7 @@ func (w *WebHandlers) Dashboard(c *gin.Context) {
 		"RecentOrders": recentOrders,
 		"Alerts":       []gin.H{},
 	}
-	w.render(c, "pages/dashboard/index.html", data)
+	w.renderTemplate(c, "dashboard", data)
 }
 
 // formatRelativeTime formats a time as relative (e.g., "5 min ago")
@@ -602,7 +682,7 @@ func (w *WebHandlers) Tenants(c *gin.Context) {
 		"StartIndex":  (page-1)*limit + 1,
 		"EndIndex":    min((page-1)*limit+len(tenantData), int(total)),
 	}
-	w.render(c, "pages/tenants/list.html", data)
+	w.renderTemplate(c, "tenants-list", data)
 }
 
 func min(a, b int) int {
@@ -655,7 +735,7 @@ func (w *WebHandlers) TenantDetail(c *gin.Context) {
 			"CreatedAt":         tenant.CreatedAt.Format("Jan 02, 2006"),
 		},
 	}
-	w.render(c, "pages/tenants/view.html", data)
+	w.renderTemplate(c, "tenants-view", data)
 }
 
 // Sites renders the sites page
@@ -663,7 +743,7 @@ func (w *WebHandlers) Sites(c *gin.Context) {
 	data := gin.H{
 		"CurrentPage": "sites",
 	}
-	w.render(c, "pages/sites/list.html", data)
+	w.renderTemplate(c, "sites-list", data)
 }
 
 // SiteDetail renders the site detail page
@@ -671,7 +751,7 @@ func (w *WebHandlers) SiteDetail(c *gin.Context) {
 	data := gin.H{
 		"CurrentPage": "sites",
 	}
-	w.render(c, "pages/sites/view.html", data)
+	w.renderTemplate(c, "sites-view", data)
 }
 
 // KOSInstances renders the KOS instances page
@@ -713,7 +793,7 @@ func (w *WebHandlers) KOSInstances(c *gin.Context) {
 		"CurrentPage":  "kos",
 		"KOSInstances": kosData,
 	}
-	w.render(c, "pages/kos/list.html", data)
+	w.renderTemplate(c, "kos-list", data)
 }
 
 // KOSNew renders the new KOS form
@@ -721,7 +801,7 @@ func (w *WebHandlers) KOSNew(c *gin.Context) {
 	data := gin.H{
 		"CurrentPage": "kos",
 	}
-	w.render(c, "pages/kos/form.html", data)
+	w.renderTemplate(c, "kos-form", data)
 }
 
 // KOSDetail renders the KOS detail page
@@ -729,7 +809,7 @@ func (w *WebHandlers) KOSDetail(c *gin.Context) {
 	data := gin.H{
 		"CurrentPage": "kos",
 	}
-	w.render(c, "pages/kos/view.html", data)
+	w.renderTemplate(c, "kos-view", data)
 }
 
 // Recipes renders the recipes page
@@ -775,31 +855,150 @@ func (w *WebHandlers) Recipes(c *gin.Context) {
 		"PublishedCount": publishedCount,
 		"DraftCount":     draftCount,
 	}
-	w.render(c, "pages/recipes/list.html", data)
+	w.renderTemplate(c, "recipes-list", data)
 }
 
 // RecipeNew renders the new recipe form
 func (w *WebHandlers) RecipeNew(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantIDStr := middleware.GetEffectiveTenantID(c)
+
+	ingredientData := []gin.H{}
+
+	if tenantIDStr != "" {
+		tenantID, err := primitive.ObjectIDFromHex(tenantIDStr)
+		if err == nil {
+			ingredients, _, _ := w.handlers.repos.Ingredient.ListByTenant(ctx, tenantID, false, 1, 500)
+			for _, i := range ingredients {
+				ingredientData = append(ingredientData, gin.H{
+					"ID":           i.ID.Hex(),
+					"Name":         i.Name,
+					"MoistureType": i.MoistureType,
+				})
+			}
+		}
+	}
+
 	data := gin.H{
 		"CurrentPage": "recipes",
+		"IsNew":       true,
+		"Recipe": gin.H{
+			"Name":                    "",
+			"EstimatedPrepTimeSec":    0,
+			"EstimatedCookingTimeSec": 0,
+		},
+		"Steps":       []gin.H{},
+		"Ingredients": ingredientData,
 	}
-	w.render(c, "pages/recipes/form.html", data)
+	w.renderTemplate(c, "recipes-form", data)
 }
 
 // RecipeDetail renders the recipe detail page
 func (w *WebHandlers) RecipeDetail(c *gin.Context) {
+	ctx := c.Request.Context()
+	recipeID := c.Param("id")
+
+	recipeOID, err := primitive.ObjectIDFromHex(recipeID)
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid recipe ID")
+		return
+	}
+
+	recipe, err := w.handlers.repos.Recipe.GetByID(ctx, recipeOID)
+	if err != nil || recipe == nil {
+		c.String(http.StatusNotFound, "Recipe not found")
+		return
+	}
+
+	// Get recipe steps from embedded array
+	stepData := []gin.H{}
+	for _, s := range recipe.Steps {
+		stepData = append(stepData, gin.H{
+			"StepNumber":     s.StepNumber,
+			"Action":         s.Action,
+			"Parameters":     s.Parameters,
+			"DependsOnSteps": s.DependsOnSteps,
+			"Name":           s.Name,
+			"Description":    s.Description,
+		})
+	}
+
 	data := gin.H{
 		"CurrentPage": "recipes",
+		"Recipe": gin.H{
+			"ID":                      recipe.ID.Hex(),
+			"Name":                    recipe.Name,
+			"Status":                  recipe.Status,
+			"IsActive":                recipe.Status == "published",
+			"EstimatedPrepTimeSec":    recipe.EstimatedPrepTimeSec,
+			"EstimatedCookingTimeSec": recipe.EstimatedCookingTimeSec,
+		},
+		"Steps": stepData,
 	}
-	w.render(c, "pages/recipes/view.html", data)
+	w.renderTemplate(c, "recipes-view", data)
 }
 
 // RecipeEdit renders the recipe edit form
 func (w *WebHandlers) RecipeEdit(c *gin.Context) {
+	ctx := c.Request.Context()
+	recipeID := c.Param("id")
+	tenantIDStr := middleware.GetEffectiveTenantID(c)
+
+	recipeOID, err := primitive.ObjectIDFromHex(recipeID)
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid recipe ID")
+		return
+	}
+
+	recipe, err := w.handlers.repos.Recipe.GetByID(ctx, recipeOID)
+	if err != nil || recipe == nil {
+		c.String(http.StatusNotFound, "Recipe not found")
+		return
+	}
+
+	// Get recipe steps from embedded array
+	stepData := []gin.H{}
+	for _, s := range recipe.Steps {
+		stepData = append(stepData, gin.H{
+			"StepNumber":     s.StepNumber,
+			"Action":         s.Action,
+			"Parameters":     s.Parameters,
+			"DependsOnSteps": s.DependsOnSteps,
+			"Name":           s.Name,
+			"Description":    s.Description,
+		})
+	}
+
+	// Get ingredients for selector
+	ingredientData := []gin.H{}
+	if tenantIDStr != "" {
+		tenantID, err := primitive.ObjectIDFromHex(tenantIDStr)
+		if err == nil {
+			ingredients, _, _ := w.handlers.repos.Ingredient.ListByTenant(ctx, tenantID, false, 1, 500)
+			for _, i := range ingredients {
+				ingredientData = append(ingredientData, gin.H{
+					"ID":           i.ID.Hex(),
+					"Name":         i.Name,
+					"MoistureType": i.MoistureType,
+				})
+			}
+		}
+	}
+
 	data := gin.H{
 		"CurrentPage": "recipes",
+		"IsNew":       false,
+		"Recipe": gin.H{
+			"ID":                      recipe.ID.Hex(),
+			"Name":                    recipe.Name,
+			"Status":                  recipe.Status,
+			"EstimatedPrepTimeSec":    recipe.EstimatedPrepTimeSec,
+			"EstimatedCookingTimeSec": recipe.EstimatedCookingTimeSec,
+		},
+		"Steps":       stepData,
+		"Ingredients": ingredientData,
 	}
-	w.render(c, "pages/recipes/edit.html", data)
+	w.renderTemplate(c, "recipes-form", data)
 }
 
 // Ingredients renders the ingredients page
@@ -843,7 +1042,7 @@ func (w *WebHandlers) Ingredients(c *gin.Context) {
 		"WetCount":    wetCount,
 		"LiquidCount": liquidCount,
 	}
-	w.render(c, "pages/ingredients/list.html", data)
+	w.renderTemplate(c, "ingredients-list", data)
 }
 
 // Orders renders the orders page
@@ -921,23 +1120,82 @@ func (w *WebHandlers) Orders(c *gin.Context) {
 			"Failed":     failedCount,
 		},
 	}
-	w.render(c, "pages/orders/list.html", data)
+	w.renderTemplate(c, "orders-list", data)
 }
 
 // OrderNew renders the new order form
 func (w *WebHandlers) OrderNew(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantIDStr := middleware.GetEffectiveTenantID(c)
+
+	recipeData := []gin.H{}
+	siteData := []gin.H{}
+
+	if tenantIDStr != "" {
+		tenantID, err := primitive.ObjectIDFromHex(tenantIDStr)
+		if err == nil {
+			// Get published recipes
+			recipes, _, _ := w.handlers.repos.Recipe.ListByTenant(ctx, tenantID, "published", 1, 100)
+			for _, r := range recipes {
+				recipeData = append(recipeData, gin.H{
+					"ID":   r.ID.Hex(),
+					"Name": r.Name,
+				})
+			}
+
+			// Get sites
+			sites, _, _ := w.handlers.repos.Site.ListByTenant(ctx, tenantID, 1, 100)
+			for _, s := range sites {
+				siteData = append(siteData, gin.H{
+					"ID":   s.ID.Hex(),
+					"Name": s.Name,
+				})
+			}
+		}
+	}
+
 	data := gin.H{
 		"CurrentPage": "orders",
+		"Recipes":     recipeData,
+		"Sites":       siteData,
 	}
-	w.render(c, "pages/orders/form.html", data)
+	w.renderTemplate(c, "orders-form", data)
 }
 
 // OrderDetail renders the order detail page
 func (w *WebHandlers) OrderDetail(c *gin.Context) {
+	ctx := c.Request.Context()
+	orderID := c.Param("id")
+
+	orderOID, err := primitive.ObjectIDFromHex(orderID)
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid order ID")
+		return
+	}
+
+	order, err := w.handlers.repos.Order.GetByID(ctx, orderOID)
+	if err != nil || order == nil {
+		c.String(http.StatusNotFound, "Order not found")
+		return
+	}
+
 	data := gin.H{
 		"CurrentPage": "orders",
+		"Order": gin.H{
+			"ID":            order.ID.Hex(),
+			"OrderID":       order.OrderReference,
+			"RecipeID":      order.RecipeID.Hex(),
+			"RecipeName":    order.RecipeName,
+			"SiteID":        order.SiteID.Hex(),
+			"CustomerName":  order.CustomerName,
+			"Status":        order.Status,
+			"Priority":      order.Priority,
+			"PotPercentage": order.PotPercentage,
+			"CreatedAt":     order.CreatedAt,
+			"UpdatedAt":     order.UpdatedAt,
+		},
 	}
-	w.render(c, "pages/orders/view.html", data)
+	w.renderTemplate(c, "orders-view", data)
 }
 
 // Settings renders the settings page
@@ -945,7 +1203,7 @@ func (w *WebHandlers) Settings(c *gin.Context) {
 	data := gin.H{
 		"CurrentPage": "settings",
 	}
-	w.render(c, "pages/settings/index.html", data)
+	w.renderTemplate(c, "settings", data)
 }
 
 // AuditLog renders the audit log page
@@ -953,5 +1211,5 @@ func (w *WebHandlers) AuditLog(c *gin.Context) {
 	data := gin.H{
 		"CurrentPage": "audit",
 	}
-	w.render(c, "pages/audit/index.html", data)
+	w.renderTemplate(c, "audit", data)
 }

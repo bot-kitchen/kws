@@ -30,7 +30,10 @@
       "Bash(bash:*)",
       "Bash(tail:*)",
       "Bash(supervisorctl:*)",
-      "Bash(bun install)"
+      "Bash(bun install)",
+      "Bash(timeout 8 make run:*)",
+      "Bash(make css:*)",
+      "Bash(timeout 5 make:*)"
     ],
     "deny": [],
     "ask": [],

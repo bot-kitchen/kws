@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ak/kws/internal/app/middleware"
 	"github.com/ak/kws/internal/domain/models"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -12,8 +13,8 @@ import (
 // ==================== Recipe handlers ====================
 
 type CreateRecipeRequest struct {
-	TenantID    string                    `json:"tenant_id" binding:"required"`
-	Name        string                    `json:"name" binding:"required"`
+	TenantID string `json:"tenant_id"` // Optional in request, validated against session
+	Name     string `json:"name" binding:"required"`
 	Description string                    `json:"description"`
 	Category    string                    `json:"category"`
 	PrepTime    int                       `json:"prep_time"`
@@ -93,7 +94,21 @@ func (a *Application) createRecipe(c *gin.Context) {
 		return
 	}
 
-	tenantID, err := primitive.ObjectIDFromHex(req.TenantID)
+	// Get tenant_id from session context to validate against request
+	sessionTenantID := middleware.GetEffectiveTenantID(c)
+	if sessionTenantID == "" {
+		errorResponse(c, http.StatusUnauthorized, "NO_TENANT", "No tenant context - please select a tenant")
+		return
+	}
+
+	// Use session tenant_id, but if request provides one, validate it matches
+	tenantIDStr := sessionTenantID
+	if req.TenantID != "" && req.TenantID != sessionTenantID {
+		errorResponse(c, http.StatusForbidden, "TENANT_MISMATCH", "Request tenant_id does not match session context")
+		return
+	}
+
+	tenantID, err := primitive.ObjectIDFromHex(tenantIDStr)
 	if err != nil {
 		errorResponse(c, http.StatusBadRequest, "INVALID_ID", "Invalid tenant_id format")
 		return

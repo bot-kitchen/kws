@@ -1,13 +1,165 @@
-{{define "title"}}New Order - KWS{{end}}
-{{define "page-title"}}New Order{{end}}
+{{define "orders-form"}}
+<div class="max-w-2xl mx-auto">
+    <!-- Back Button -->
+    <div class="mb-6">
+        <a href="/orders" class="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-primary transition-colors">
+            <span class="material-symbols-outlined">arrow_back</span>
+            <span>Back to Orders</span>
+        </a>
+    </div>
 
-{{define "content"}}
-<div class="space-y-6">
-    <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-12 text-center">
-        <span class="material-symbols-outlined text-4xl text-gray-400 mb-4">receipt_long</span>
-        <p class="text-gray-500 dark:text-text-secondary">New order form coming soon</p>
+    <!-- Form Card -->
+    <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-6">
+        <h1 class="text-xl font-bold text-gray-900 dark:text-white mb-6">Create New Order</h1>
+
+        <form id="order-form" class="space-y-6">
+            <!-- Recipe Selection -->
+            <div>
+                <label for="recipe_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Recipe <span class="text-red-500">*</span>
+                </label>
+                <select id="recipe_id" name="recipe_id" required
+                        class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white">
+                    <option value="">Select a recipe...</option>
+                    {{range .Recipes}}
+                    <option value="{{.ID}}">{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+
+            <!-- Customer Name -->
+            <div>
+                <label for="customer_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Customer Name
+                </label>
+                <input type="text" id="customer_name" name="customer_name"
+                       class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                       placeholder="Enter customer name (optional)">
+            </div>
+
+            <!-- Site Selection -->
+            <div>
+                <label for="site_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Site <span class="text-red-500">*</span>
+                </label>
+                <select id="site_id" name="site_id" required
+                        class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white">
+                    <option value="">Select a site...</option>
+                    {{range .Sites}}
+                    <option value="{{.ID}}">{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+
+            <!-- Priority -->
+            <div>
+                <label for="priority" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Priority
+                </label>
+                <select id="priority" name="priority"
+                        class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white">
+                    <option value="normal" selected>Normal</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                </select>
+            </div>
+
+            <!-- Pot Percentage -->
+            <div>
+                <label for="pot_percentage" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Pot Percentage
+                </label>
+                <input type="number" id="pot_percentage" name="pot_percentage"
+                       class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                       min="1" max="100" step="1" placeholder="100" value="100">
+                <p class="mt-1 text-xs text-gray-500 dark:text-text-secondary">Percentage of pot capacity to use (1-100%)</p>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-border-dark">
+                <a href="/orders"
+                   class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-surface-dark border border-gray-300 dark:border-border-dark rounded-lg hover:bg-gray-50 dark:hover:bg-surface-highlight transition-colors">
+                    Cancel
+                </a>
+                <button type="submit"
+                        class="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary-hover rounded-lg transition-colors flex items-center gap-2">
+                    <span class="material-symbols-outlined text-sm">add</span>
+                    Create Order
+                </button>
+            </div>
+        </form>
     </div>
 </div>
-{{end}}
 
-{{define "scripts"}}{{end}}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('order-form');
+
+    // Initialize Tom Select for recipe dropdown if available
+    if (typeof TomSelect !== 'undefined') {
+        new TomSelect('#recipe_id', {
+            placeholder: 'Search recipes...',
+            allowEmptyOption: true
+        });
+        new TomSelect('#site_id', {
+            placeholder: 'Search sites...',
+            allowEmptyOption: true
+        });
+    }
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const formData = new FormData(form);
+        const data = {
+            recipe_id: formData.get('recipe_id'),
+            customer_name: formData.get('customer_name') || undefined,
+            site_id: formData.get('site_id'),
+            priority: formData.get('priority'),
+            pot_percentage: parseInt(formData.get('pot_percentage')) || 100
+        };
+
+        // Remove undefined fields
+        Object.keys(data).forEach(key => {
+            if (data[key] === undefined) {
+                delete data[key];
+            }
+        });
+
+        try {
+            const response = await fetch('/api/v1/orders', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.success) {
+                if (typeof showToast === 'function') {
+                    showToast('Order created successfully', 'success');
+                }
+                // Redirect to orders list
+                window.location.href = '/orders';
+            } else {
+                const errorMsg = result.error || 'Failed to create order';
+                if (typeof showToast === 'function') {
+                    showToast(errorMsg, 'error');
+                } else {
+                    alert(errorMsg);
+                }
+            }
+        } catch (error) {
+            console.error('Error creating order:', error);
+            if (typeof showToast === 'function') {
+                showToast('Failed to create order', 'error');
+            } else {
+                alert('Failed to create order');
+            }
+        }
+    });
+});
+</script>
+{{end}}

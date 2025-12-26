@@ -1,13 +1,340 @@
-{{define "title"}}Recipe Detail - KWS{{end}}
-{{define "page-title"}}Recipe Detail{{end}}
-
-{{define "content"}}
-<div class="space-y-6">
-    <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-12 text-center">
-        <span class="material-symbols-outlined text-4xl text-gray-400 mb-4">menu_book</span>
-        <p class="text-gray-500 dark:text-text-secondary">Recipe detail page coming soon</p>
+{{define "recipes-view"}}
+<div class="max-w-6xl mx-auto">
+    <!-- Header -->
+    <div class="flex justify-between items-start mb-6">
+        <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-primary text-3xl">menu_book</span>
+            <div>
+                <h1 class="text-2xl font-bold">{{.Recipe.Name}}</h1>
+                <div class="flex items-center gap-4 mt-1 text-sm text-text-secondary">
+                    <span class="flex items-center gap-1">
+                        <span class="material-symbols-outlined text-base">schedule</span>
+                        {{divFloat .Recipe.EstimatedPrepTimeSec 60 | printf "%.0f"}}m prep
+                    </span>
+                    <span class="flex items-center gap-1">
+                        <span class="material-symbols-outlined text-base">local_fire_department</span>
+                        {{divFloat .Recipe.EstimatedCookingTimeSec 60 | printf "%.0f"}}m cook
+                    </span>
+                    <span class="px-2 py-0.5 text-xs rounded-full
+                        {{if .Recipe.IsActive}}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200
+                        {{else}}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200{{end}}">
+                        {{if .Recipe.IsActive}}Active{{else}}Inactive{{end}}
+                    </span>
+                </div>
+            </div>
+        </div>
+        <div class="flex gap-2">
+            <a href="/recipes/{{.Recipe.ID}}/edit"
+                class="flex items-center gap-2 rounded-lg bg-primary hover:bg-primary/90 text-white px-4 py-2 text-sm font-medium transition-all">
+                <span class="material-symbols-outlined text-lg">edit</span>
+                Edit
+            </a>
+            <a href="/recipes"
+                class="flex items-center gap-2 rounded-lg bg-gray-100 dark:bg-surface-highlight hover:bg-gray-200 dark:hover:bg-border-dark text-gray-700 dark:text-white px-4 py-2 text-sm font-medium transition-colors">
+                <span class="material-symbols-outlined text-lg">arrow_back</span>
+                Back
+            </a>
+        </div>
     </div>
-</div>
-{{end}}
 
-{{define "scripts"}}{{end}}
+    {{if .Recipe.RecipeSteps}}
+    <!-- DAG Container -->
+    <div class="relative bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-6">
+        <!-- Header with title and legend -->
+        <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary">account_tree</span>
+                <h2 class="text-lg font-semibold">Steps Dependency Graph</h2>
+                <span class="text-xs text-text-secondary ml-2">Steps at the same level can run in parallel</span>
+            </div>
+            <!-- Legend -->
+            <div class="flex flex-wrap gap-3 text-xs text-text-secondary">
+                <div class="flex items-center gap-1.5">
+                    <div class="w-2.5 h-2.5 rounded-full bg-gray-500"></div>
+                    <span>System</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <div class="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
+                    <span>Liquid</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <div class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
+                    <span>Ingredient</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+                    <span>Heat</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+                    <span>Agitate</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <div class="w-2.5 h-2.5 rounded-full bg-purple-500"></div>
+                    <span>Lid</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- DAG wrapper to contain both SVG and cards -->
+        <div id="dag-wrapper" class="relative">
+            <!-- SVG for dependency arrows -->
+            <svg id="arrows-svg" class="absolute inset-0 w-full h-full pointer-events-none" style="z-index: 1;"></svg>
+            <!-- DAG Levels -->
+            <div id="dag-container" class="relative" style="z-index: 2;">
+                <!-- Levels will be rendered here by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    {{else}}
+    <div
+        class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl text-center py-12">
+        <span class="material-symbols-outlined text-4xl text-text-secondary mb-2">format_list_numbered</span>
+        <p class="text-text-secondary mb-4">No recipe steps defined yet.</p>
+        <a href="/recipes/{{.Recipe.ID}}/edit"
+            class="inline-flex items-center gap-2 rounded-lg bg-primary hover:bg-primary/90 text-white px-4 py-2 text-sm font-medium transition-all">
+            <span class="material-symbols-outlined text-lg">add</span>
+            Add Recipe Steps
+        </a>
+    </div>
+    {{end}}
+</div>
+
+{{if .Recipe.RecipeSteps}}
+<style>
+    .step-card {
+        transition: all 0.2s ease;
+    }
+
+    .step-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(110, 86, 207, 0.15);
+    }
+
+    .dependency-line {
+        stroke: #6e56cf;
+        stroke-width: 2;
+        fill: none;
+        opacity: 0.6;
+    }
+
+    .dependency-arrow {
+        fill: #6e56cf;
+        opacity: 0.6;
+    }
+</style>
+
+<script>
+(function() {
+    // Recipe steps data from server (using json template function)
+    const recipeStepsRaw = {{.Recipe.RecipeSteps | json}};
+
+    // Parse JSON string fields (Parameters and DependsOnSteps are stored as JSON strings in DB)
+    const recipeSteps = recipeStepsRaw.map(step => ({
+        step_number: step.step_number,
+        action: step.action,
+        parameters: typeof step.parameters === 'string' ? JSON.parse(step.parameters || '{}') : (step.parameters || {}),
+        depends_on_steps: typeof step.depends_on_steps === 'string' ? JSON.parse(step.depends_on_steps || '[]') : (step.depends_on_steps || [])
+    }));
+
+    // Action styling for DAG view
+    const DAG_COLORS = {
+        'acquire_pot_from_staging': { bgClass: 'bg-gray-100 dark:bg-gray-500/20', borderClass: 'border-gray-300 dark:border-gray-500/50', textClass: 'text-gray-500 dark:text-gray-400' },
+        'deliver_pot_to_serving': { bgClass: 'bg-gray-100 dark:bg-gray-500/20', borderClass: 'border-gray-300 dark:border-gray-500/50', textClass: 'text-gray-500 dark:text-gray-400' },
+        'add_liquid': { bgClass: 'bg-blue-50 dark:bg-blue-500/20', borderClass: 'border-blue-200 dark:border-blue-500/50', textClass: 'text-blue-600 dark:text-blue-400' },
+        'add_solid': { bgClass: 'bg-yellow-50 dark:bg-yellow-500/20', borderClass: 'border-yellow-300 dark:border-yellow-500/50', textClass: 'text-yellow-600 dark:text-yellow-400' },
+        'pick_ingredient': { bgClass: 'bg-yellow-50 dark:bg-yellow-500/20', borderClass: 'border-yellow-300 dark:border-yellow-500/50', textClass: 'text-yellow-600 dark:text-yellow-400' },
+        'place_ingredient': { bgClass: 'bg-yellow-50 dark:bg-yellow-500/20', borderClass: 'border-yellow-300 dark:border-yellow-500/50', textClass: 'text-yellow-600 dark:text-yellow-400' },
+        'heat': { bgClass: 'bg-red-50 dark:bg-red-500/20', borderClass: 'border-red-200 dark:border-red-500/50', textClass: 'text-red-600 dark:text-red-400' },
+        'agitate': { bgClass: 'bg-green-50 dark:bg-green-500/20', borderClass: 'border-green-200 dark:border-green-500/50', textClass: 'text-green-600 dark:text-green-400' },
+        'open_pot_lid': { bgClass: 'bg-purple-50 dark:bg-purple-500/20', borderClass: 'border-purple-200 dark:border-purple-500/50', textClass: 'text-purple-600 dark:text-purple-400' },
+        'close_pot_lid': { bgClass: 'bg-purple-50 dark:bg-purple-500/20', borderClass: 'border-purple-200 dark:border-purple-500/50', textClass: 'text-purple-600 dark:text-purple-400' }
+    };
+    const DAG_ICONS = {
+        'add_liquid': 'water_drop', 'add_solid': 'add_circle', 'heat': 'local_fire_department', 'agitate': 'sync',
+        'pick_ingredient': 'move_up', 'place_ingredient': 'move_down', 'open_pot_lid': 'expand_less', 'close_pot_lid': 'expand_more',
+        'acquire_pot_from_staging': 'move_up', 'deliver_pot_to_serving': 'move_down'
+    };
+    const DAG_LABELS = {
+        'add_liquid': 'Add Liquid', 'add_solid': 'Add Solid', 'heat': 'Heat', 'agitate': 'Agitate/Mix',
+        'pick_ingredient': 'Pick', 'place_ingredient': 'Place', 'open_pot_lid': 'Open Lid', 'close_pot_lid': 'Close Lid',
+        'acquire_pot_from_staging': 'Acquire Pot', 'deliver_pot_to_serving': 'Deliver Pot'
+    };
+    const DEFAULT_CONFIG = { bgClass: 'bg-gray-100 dark:bg-gray-500/20', borderClass: 'border-gray-300 dark:border-gray-500/50', textClass: 'text-gray-500 dark:text-gray-400' };
+
+    function getActionConfig(action) {
+        const colors = DAG_COLORS[action] || DEFAULT_CONFIG;
+        return {
+            icon: DAG_ICONS[action] || 'help',
+            label: DAG_LABELS[action] || action || 'Untitled',
+            ...colors
+        };
+    }
+
+    // Calculate levels using topological sort
+    function calculateLevels(steps) {
+        const stepMap = new Map(steps.map(s => [s.step_number, s]));
+        const levels = new Map();
+
+        function getLevel(stepNum) {
+            if (levels.has(stepNum)) return levels.get(stepNum);
+
+            const step = stepMap.get(stepNum);
+            if (!step || !step.depends_on_steps || step.depends_on_steps.length === 0) {
+                levels.set(stepNum, 0);
+                return 0;
+            }
+
+            const maxDepLevel = Math.max(...step.depends_on_steps.map(d => getLevel(d)));
+            const level = maxDepLevel + 1;
+            levels.set(stepNum, level);
+            return level;
+        }
+
+        steps.forEach(s => getLevel(s.step_number));
+        return levels;
+    }
+
+    // Group steps by level
+    function groupByLevel(steps, levels) {
+        const groups = new Map();
+        steps.forEach(step => {
+            const level = levels.get(step.step_number);
+            if (!groups.has(level)) groups.set(level, []);
+            groups.get(level).push(step);
+        });
+        return groups;
+    }
+
+    // Get parameter summary
+    function getParamSummary(step) {
+        const p = step.parameters || {};
+        switch (step.action) {
+            case 'add_liquid':
+            case 'add_solid':
+                if (p.ingredient_name) return `${p.ingredient_name} ${p.quantity || ''}${p.metric || ''}`;
+                return p.quantity ? `${p.quantity}${p.metric || ''}` : '';
+            case 'pick_ingredient':
+            case 'place_ingredient':
+                return p.ingredient_name || '';
+            case 'heat':
+                if (p.on_duration_sec) return `L${p.power_level || ''} ${Math.round(p.on_duration_sec / 60)}min`;
+                return '';
+            case 'agitate':
+                if (p.duration_sec) return `${(p.speed || '').replace('_', ' ')} ${p.duration_sec}s`;
+                return '';
+            default:
+                return '';
+        }
+    }
+
+    // Create step card HTML (compact version)
+    function createStepCard(step) {
+        const config = getActionConfig(step.action);
+        const paramSummary = getParamSummary(step);
+
+        return `
+            <div class="step-card ${config.bgClass} border ${config.borderClass} rounded p-2 min-w-[160px] max-w-[200px] cursor-default"
+                 data-step="${step.step_number}" id="step-${step.step_number}">
+                <div class="flex items-center gap-1.5">
+                    <span class="flex items-center justify-center w-5 h-5 rounded-full bg-gray-200 dark:bg-surface-highlight text-[10px] font-bold text-gray-700 dark:text-white shrink-0">
+                        ${step.step_number}
+                    </span>
+                    <span class="material-symbols-outlined ${config.textClass} text-base">${config.icon}</span>
+                    <span class="text-xs font-medium text-gray-900 dark:text-white whitespace-nowrap">${config.label}</span>
+                </div>
+                ${paramSummary ? `<div class="text-[11px] text-gray-600 dark:text-text-secondary mt-1 pl-6 whitespace-nowrap">${paramSummary}</div>` : ''}
+            </div>
+        `;
+    }
+
+    // Render the DAG
+    function renderDAG() {
+        const container = document.getElementById('dag-container');
+        if (!container || recipeSteps.length === 0) return;
+
+        const levels = calculateLevels(recipeSteps);
+        const groups = groupByLevel(recipeSteps, levels);
+        const maxLevel = Math.max(...levels.values());
+
+        let html = '';
+        for (let level = 0; level <= maxLevel; level++) {
+            const stepsAtLevel = groups.get(level) || [];
+            const isLastLevel = level === maxLevel;
+            html += `
+                <div class="flex justify-center gap-3 ${isLastLevel ? '' : 'mb-16'}" data-level="${level}">
+                    ${stepsAtLevel.map(s => createStepCard(s)).join('')}
+                </div>
+            `;
+        }
+        container.innerHTML = html;
+
+        // Draw arrows after DOM is updated
+        requestAnimationFrame(() => drawArrows());
+    }
+
+    // Draw dependency arrows using SVG
+    function drawArrows() {
+        const svg = document.getElementById('arrows-svg');
+        const wrapper = document.getElementById('dag-wrapper');
+        if (!svg || !wrapper) return;
+
+        const wrapperRect = wrapper.getBoundingClientRect();
+
+        // Clear existing arrows
+        svg.innerHTML = '';
+
+        // Create arrow marker (userSpaceOnUse means marker size is in pixels, not scaled by stroke)
+        const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        defs.innerHTML = `
+            <marker id="arrowhead" markerWidth="12" markerHeight="10" refX="0" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+                <polygon points="0 0, 12 5, 0 10" class="dependency-arrow"/>
+            </marker>
+        `;
+        svg.appendChild(defs);
+
+        // Draw lines for each dependency
+        recipeSteps.forEach(step => {
+            const deps = step.depends_on_steps || [];
+            if (deps.length === 0) return;
+
+            const targetEl = document.getElementById(`step-${step.step_number}`);
+            if (!targetEl) return;
+
+            deps.forEach(depNum => {
+                const sourceEl = document.getElementById(`step-${depNum}`);
+                if (!sourceEl) return;
+
+                const sourceRect = sourceEl.getBoundingClientRect();
+                const targetRect = targetEl.getBoundingClientRect();
+
+                // Calculate positions relative to wrapper
+                const x1 = sourceRect.left + sourceRect.width / 2 - wrapperRect.left;
+                const y1 = sourceRect.bottom - wrapperRect.top;
+                const x2 = targetRect.left + targetRect.width / 2 - wrapperRect.left;
+                // End line 12px above the card (arrowhead is 12px long, so tip will be at card edge)
+                const y2 = targetRect.top - wrapperRect.top - 12;
+
+                // Create curved path
+                const midY = (y1 + y2) / 2;
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`);
+                path.setAttribute('class', 'dependency-line');
+                path.setAttribute('marker-end', 'url(#arrowhead)');
+                svg.appendChild(path);
+            });
+        });
+    }
+
+    // Redraw arrows on resize
+    window.addEventListener('resize', () => {
+        requestAnimationFrame(() => drawArrows());
+    });
+
+    // Initialize - render immediately since script is at end of body
+    renderDAG();
+})();
+</script>
+{{end}}
+{{end}}
