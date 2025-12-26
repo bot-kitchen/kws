@@ -15,54 +15,22 @@
         </button>
     </div>
 
-    <!-- Stats Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-        <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4">
-            <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-1">
-                <span class="material-symbols-outlined text-lg">inventory_2</span>
-                <span class="text-sm font-medium">Total Items</span>
-            </div>
-            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{len .Ingredients}}</p>
-        </div>
-        <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4">
-            <div class="flex items-center gap-2 text-yellow-600 dark:text-yellow-400 mb-1">
-                <span class="material-symbols-outlined text-lg">inventory</span>
-                <span class="text-sm font-medium">Dry</span>
-            </div>
-            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{.DryCount}}</p>
-        </div>
-        <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4">
-            <div class="flex items-center gap-2 text-green-600 dark:text-green-400 mb-1">
-                <span class="material-symbols-outlined text-lg">grass</span>
-                <span class="text-sm font-medium">Wet</span>
-            </div>
-            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{.WetCount}}</p>
-        </div>
-        <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4">
-            <div class="flex items-center gap-2 text-blue-600 dark:text-blue-400 mb-1">
-                <span class="material-symbols-outlined text-lg">water_drop</span>
-                <span class="text-sm font-medium">Liquid</span>
-            </div>
-            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{.LiquidCount}}</p>
-        </div>
-    </div>
-
     <!-- Filters -->
     <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4">
         <div class="flex flex-wrap gap-3 items-center">
             <!-- Type Filter -->
             <div class="flex rounded-lg border border-gray-300 dark:border-border-dark overflow-hidden">
                 <button type="button" data-filter="" class="filter-btn filter-active px-3 py-1.5 text-sm font-medium bg-primary text-white transition-colors">
-                    All
+                    All ({{len .Ingredients}})
                 </button>
                 <button type="button" data-filter="dry" class="filter-btn px-3 py-1.5 text-sm font-medium bg-white dark:bg-surface-highlight text-gray-600 dark:text-gray-300 transition-colors border-l border-gray-300 dark:border-border-dark">
-                    Dry
+                    Dry ({{.DryCount}})
                 </button>
                 <button type="button" data-filter="wet" class="filter-btn px-3 py-1.5 text-sm font-medium bg-white dark:bg-surface-highlight text-gray-600 dark:text-gray-300 transition-colors border-l border-gray-300 dark:border-border-dark">
-                    Wet
+                    Wet ({{.WetCount}})
                 </button>
                 <button type="button" data-filter="liquid" class="filter-btn px-3 py-1.5 text-sm font-medium bg-white dark:bg-surface-highlight text-gray-600 dark:text-gray-300 transition-colors border-l border-gray-300 dark:border-border-dark">
-                    Liquid
+                    Liquid ({{.LiquidCount}})
                 </button>
             </div>
             <div class="flex-1"></div>

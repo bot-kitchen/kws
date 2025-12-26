@@ -12,44 +12,19 @@
         </a>
     </div>
 
-    <!-- Stats Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4">
-            <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-1">
-                <span class="material-symbols-outlined text-lg">menu_book</span>
-                <span class="text-sm font-medium">Total Recipes</span>
-            </div>
-            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{len .Recipes}}</p>
-        </div>
-        <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4">
-            <div class="flex items-center gap-2 text-green-600 dark:text-green-400 mb-1">
-                <span class="material-symbols-outlined text-lg">check_circle</span>
-                <span class="text-sm font-medium">Published</span>
-            </div>
-            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{.PublishedCount}}</p>
-        </div>
-        <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4">
-            <div class="flex items-center gap-2 text-yellow-600 dark:text-yellow-400 mb-1">
-                <span class="material-symbols-outlined text-lg">edit_note</span>
-                <span class="text-sm font-medium">Drafts</span>
-            </div>
-            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{.DraftCount}}</p>
-        </div>
-    </div>
-
     <!-- Search and Filters -->
     <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4">
         <div class="flex flex-wrap gap-3 items-center">
             <!-- Status Filter -->
             <div class="flex rounded-lg border border-gray-300 dark:border-border-dark overflow-hidden">
                 <button type="button" data-filter="" class="filter-btn filter-active px-3 py-1.5 text-sm font-medium bg-primary text-white transition-colors">
-                    All
+                    All ({{len .Recipes}})
                 </button>
                 <button type="button" data-filter="published" class="filter-btn px-3 py-1.5 text-sm font-medium bg-white dark:bg-surface-highlight text-gray-600 dark:text-gray-300 transition-colors border-l border-gray-300 dark:border-border-dark">
-                    Published
+                    Published ({{.PublishedCount}})
                 </button>
                 <button type="button" data-filter="draft" class="filter-btn px-3 py-1.5 text-sm font-medium bg-white dark:bg-surface-highlight text-gray-600 dark:text-gray-300 transition-colors border-l border-gray-300 dark:border-border-dark">
-                    Drafts
+                    Drafts ({{.DraftCount}})
                 </button>
             </div>
             <div class="flex-1"></div>
