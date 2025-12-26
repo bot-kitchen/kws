@@ -68,9 +68,11 @@ type IngredientRepository interface {
 	Create(ctx context.Context, ingredient *models.Ingredient) error
 	GetByID(ctx context.Context, id primitive.ObjectID) (*models.Ingredient, error)
 	Update(ctx context.Context, ingredient *models.Ingredient) error
-	Delete(ctx context.Context, id primitive.ObjectID) error
+	Delete(ctx context.Context, id primitive.ObjectID) error     // Soft delete (set is_active=false)
+	HardDelete(ctx context.Context, id primitive.ObjectID) error // Permanent delete
 	ListByTenant(ctx context.Context, tenantID primitive.ObjectID, activeOnly bool, page, limit int) ([]*models.Ingredient, int64, error)
 	GetByIDs(ctx context.Context, ids []primitive.ObjectID) ([]*models.Ingredient, error)
+	CountRecipesUsingIngredient(ctx context.Context, ingredientID primitive.ObjectID) (int64, error)
 }
 
 // RecipeRepository defines operations for recipe data access

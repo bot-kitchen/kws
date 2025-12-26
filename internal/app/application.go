@@ -180,6 +180,7 @@ func (a *Application) setupRoutes() {
 			ingredients.GET("/:id", a.getIngredient)
 			ingredients.PUT("/:id", a.updateIngredient)
 			ingredients.DELETE("/:id", a.deleteIngredient)
+			ingredients.POST("/:id/toggle-active", a.toggleIngredientActive)
 		}
 
 		// Recipe management

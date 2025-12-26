@@ -272,6 +272,8 @@ func (w *WebHandlers) RegisterRoutes(r *gin.Engine) {
 		protected.GET("/recipes/:id", w.RecipeDetail)
 		protected.GET("/recipes/:id/edit", w.RecipeEdit)
 		protected.GET("/ingredients", w.Ingredients)
+		protected.GET("/ingredients/new", w.IngredientNew)
+		protected.GET("/ingredients/:id/edit", w.IngredientEdit)
 		protected.GET("/orders", w.Orders)
 		protected.GET("/orders/new", w.OrderNew)
 		protected.GET("/orders/:id", w.OrderDetail)
@@ -1011,20 +1013,42 @@ func (w *WebHandlers) Ingredients(c *gin.Context) {
 	tenantIDStr := middleware.GetEffectiveTenantID(c)
 
 	ingredientData := []gin.H{}
-	var dryCount, wetCount, liquidCount int
+	var dryCount, wetCount, liquidCount, activeCount, inactiveCount int
 
 	if tenantIDStr != "" {
 		tenantID, err := primitive.ObjectIDFromHex(tenantIDStr)
 		if err == nil {
+			// Get all ingredients (including inactive)
 			ingredients, _, _ := w.handlers.repos.Ingredient.ListByTenant(ctx, tenantID, false, 1, 100)
 			for _, i := range ingredients {
-				ingredientData = append(ingredientData, gin.H{
-					"ID":           i.ID.Hex(),
-					"Name":         i.Name,
-					"MoistureType": i.MoistureType,
-					"AllergenInfo": i.AllergenInfo,
-					"IsActive":     i.IsActive,
-				})
+				ingredientItem := gin.H{
+					"ID":               i.ID.Hex(),
+					"Name":             i.Name,
+					"MoistureType":     i.MoistureType,
+					"AllergenInfo":     strings.Join(i.AllergenInfo, ", "),
+					"IsActive":         i.IsActive,
+					"ShelfLifeMinutes": i.ShelfLifeMinutes,
+				}
+
+				// Add nutrition fields with defaults
+				if i.Nutrition != nil {
+					ingredientItem["CaloriesPer100g"] = i.Nutrition.CaloriesPer100g
+					ingredientItem["ProteinPer100g"] = i.Nutrition.ProteinPer100g
+					ingredientItem["FatPer100g"] = i.Nutrition.FatPer100g
+					ingredientItem["CarbsPer100g"] = i.Nutrition.CarbsPer100g
+					ingredientItem["SugarPer100g"] = i.Nutrition.SugarPer100g
+					ingredientItem["FiberPer100g"] = i.Nutrition.FiberPer100g
+					ingredientItem["SodiumPer100g"] = i.Nutrition.SodiumPer100g
+				} else {
+					ingredientItem["CaloriesPer100g"] = 0.0
+					ingredientItem["ProteinPer100g"] = 0.0
+					ingredientItem["FatPer100g"] = 0.0
+					ingredientItem["CarbsPer100g"] = 0.0
+					ingredientItem["SugarPer100g"] = 0.0
+					ingredientItem["FiberPer100g"] = 0.0
+					ingredientItem["SodiumPer100g"] = 0.0
+				}
+				ingredientData = append(ingredientData, ingredientItem)
 
 				// Count by moisture type
 				switch i.MoistureType {
@@ -1035,18 +1059,86 @@ func (w *WebHandlers) Ingredients(c *gin.Context) {
 				case "liquid":
 					liquidCount++
 				}
+
+				// Count by active status
+				if i.IsActive {
+					activeCount++
+				} else {
+					inactiveCount++
+				}
 			}
 		}
 	}
 
 	data := gin.H{
-		"CurrentPage": "ingredients",
-		"Ingredients": ingredientData,
-		"DryCount":    dryCount,
-		"WetCount":    wetCount,
-		"LiquidCount": liquidCount,
+		"CurrentPage":   "ingredients",
+		"Ingredients":   ingredientData,
+		"DryCount":      dryCount,
+		"WetCount":      wetCount,
+		"LiquidCount":   liquidCount,
+		"ActiveCount":   activeCount,
+		"InactiveCount": inactiveCount,
 	}
 	w.renderTemplate(c, "ingredients-list", data)
+}
+
+// IngredientNew renders the new ingredient form
+func (w *WebHandlers) IngredientNew(c *gin.Context) {
+	tenantIDStr := middleware.GetEffectiveTenantID(c)
+
+	data := gin.H{
+		"CurrentPage": "ingredients",
+		"Ingredient":  gin.H{},
+		"TenantID":    tenantIDStr,
+	}
+	w.renderTemplate(c, "ingredients-form", data)
+}
+
+// IngredientEdit renders the ingredient edit form
+func (w *WebHandlers) IngredientEdit(c *gin.Context) {
+	ctx := c.Request.Context()
+	ingredientID := c.Param("id")
+	tenantIDStr := middleware.GetEffectiveTenantID(c)
+
+	ingredientOID, err := primitive.ObjectIDFromHex(ingredientID)
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid ingredient ID")
+		return
+	}
+
+	ingredient, err := w.handlers.repos.Ingredient.GetByID(ctx, ingredientOID)
+	if err != nil || ingredient == nil {
+		c.String(http.StatusNotFound, "Ingredient not found")
+		return
+	}
+
+	// Build ingredient data for template including nutrition fields
+	ingredientData := gin.H{
+		"ID":               ingredient.ID.Hex(),
+		"Name":             ingredient.Name,
+		"MoistureType":     string(ingredient.MoistureType),
+		"ShelfLifeMinutes": ingredient.ShelfLifeMinutes,
+		"AllergenInfo":     strings.Join(ingredient.AllergenInfo, ", "),
+		"IsActive":         ingredient.IsActive,
+	}
+
+	// Add nutrition fields if present
+	if ingredient.Nutrition != nil {
+		ingredientData["CaloriesPer100g"] = ingredient.Nutrition.CaloriesPer100g
+		ingredientData["ProteinPer100g"] = ingredient.Nutrition.ProteinPer100g
+		ingredientData["FatPer100g"] = ingredient.Nutrition.FatPer100g
+		ingredientData["CarbsPer100g"] = ingredient.Nutrition.CarbsPer100g
+		ingredientData["SugarPer100g"] = ingredient.Nutrition.SugarPer100g
+		ingredientData["FiberPer100g"] = ingredient.Nutrition.FiberPer100g
+		ingredientData["SodiumPer100g"] = ingredient.Nutrition.SodiumPer100g
+	}
+
+	data := gin.H{
+		"CurrentPage": "ingredients",
+		"Ingredient":  ingredientData,
+		"TenantID":    tenantIDStr,
+	}
+	w.renderTemplate(c, "ingredients-form", data)
 }
 
 // Orders renders the orders page

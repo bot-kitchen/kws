@@ -1,0 +1,234 @@
+{{define "ingredients-form"}}
+<div class="max-w-2xl mx-auto">
+    <!-- Page Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl md:text-4xl font-bold tracking-tight mb-2">
+            {{if .Ingredient.ID}}Edit{{else}}Add{{end}} Ingredient
+        </h1>
+        <p class="text-gray-500 dark:text-text-secondary text-sm md:text-base">
+            {{if .Ingredient.ID}}Update ingredient details and specifications{{else}}Add a new ingredient to your inventory{{end}}
+        </p>
+    </div>
+
+    <!-- Form Card -->
+    <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-6 md:p-8">
+        <form id="ingredient-form" hx-post="/api/v1/ingredients" hx-target="#result" hx-swap="innerHTML">
+            {{if .Ingredient.ID}}
+            <input type="hidden" name="id" value="{{.Ingredient.ID}}">
+            {{end}}
+            <input type="hidden" name="tenant_id" value="{{.TenantID}}">
+
+            <div class="mb-6">
+                <h2 class="flex items-center gap-2 text-xl font-semibold mb-6 text-gray-900 dark:text-white">
+                    <span class="material-symbols-outlined text-primary">inventory_2</span>
+                    Ingredient Details
+                </h2>
+
+                <div class="mb-6">
+                    <label for="name" class="flex items-center gap-2 mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                        <span class="material-symbols-outlined text-sm text-gray-500 dark:text-text-secondary">label</span>
+                        Name <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" id="name" name="name" value="{{.Ingredient.Name}}"
+                           class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                           required placeholder="e.g., Salt, Sugar, Water">
+                </div>
+
+                <div class="mb-6">
+                    <label class="flex items-center gap-2 mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                        <span class="material-symbols-outlined text-sm text-gray-500 dark:text-text-secondary">water_drop</span>
+                        Moisture Type <span class="text-red-500">*</span>
+                    </label>
+                    <input type="hidden" name="moisture_type" id="moisture-type-input" value="{{if .Ingredient.MoistureType}}{{.Ingredient.MoistureType}}{{else}}dry{{end}}" required>
+                    <div class="flex rounded-lg border border-gray-300 dark:border-border-dark overflow-hidden">
+                        <button type="button" data-value="dry" class="moisture-btn flex-1 px-4 py-2.5 text-sm font-medium transition-colors {{if or (eq .Ingredient.MoistureType "dry") (not .Ingredient.MoistureType)}}bg-primary text-white{{else}}bg-white dark:bg-surface-highlight text-gray-600 dark:text-gray-300{{end}}">
+                            Dry
+                        </button>
+                        <button type="button" data-value="wet" class="moisture-btn flex-1 px-4 py-2.5 text-sm font-medium transition-colors border-l border-gray-300 dark:border-border-dark {{if eq .Ingredient.MoistureType "wet"}}bg-primary text-white{{else}}bg-white dark:bg-surface-highlight text-gray-600 dark:text-gray-300{{end}}">
+                            Wet
+                        </button>
+                        <button type="button" data-value="liquid" class="moisture-btn flex-1 px-4 py-2.5 text-sm font-medium transition-colors border-l border-gray-300 dark:border-border-dark {{if eq .Ingredient.MoistureType "liquid"}}bg-primary text-white{{else}}bg-white dark:bg-surface-highlight text-gray-600 dark:text-gray-300{{end}}">
+                            Liquid
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <label for="shelf_life_hours" class="flex items-center gap-2 mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                        <span class="material-symbols-outlined text-sm text-gray-500 dark:text-text-secondary">schedule</span>
+                        Shelf Life (hours)
+                    </label>
+                    <input type="number" id="shelf_life_hours" name="shelf_life_hours"
+                           value="{{if .Ingredient.ShelfLifeMinutes}}{{divFloat .Ingredient.ShelfLifeMinutes 60 | printf "%.0f"}}{{end}}"
+                           class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                           min="0" step="1" placeholder="Leave blank for non-perishable">
+                    <p class="mt-2 text-xs text-gray-500 dark:text-text-secondary">Optional: How long the ingredient stays fresh</p>
+                </div>
+
+                <div class="mb-6">
+                    <label for="allergen_info" class="flex items-center gap-2 mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                        <span class="material-symbols-outlined text-sm text-gray-500 dark:text-text-secondary">warning</span>
+                        Allergen Info
+                    </label>
+                    <input type="text" id="allergen_info" name="allergen_info" value="{{.Ingredient.AllergenInfo}}"
+                           class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                           placeholder="Gluten, Nuts (comma separated)">
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" name="is_active" id="is-active" {{if or .Ingredient.IsActive (not .Ingredient.ID)}}checked{{end}}
+                           class="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary">
+                    <label for="is-active" class="text-sm font-medium text-gray-700 dark:text-gray-300">Active</label>
+                </div>
+            </div>
+
+            <!-- Nutrition Information -->
+            <div class="mb-6">
+                <h2 class="flex items-center gap-2 text-xl font-semibold mb-6 text-gray-900 dark:text-white">
+                    <span class="material-symbols-outlined text-primary">nutrition</span>
+                    Nutrition Information
+                    <span class="text-sm font-normal text-gray-500 dark:text-text-secondary">(per 100g)</span>
+                </h2>
+
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div>
+                        <label for="calories_per_100g" class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Calories
+                        </label>
+                        <input type="number" id="calories_per_100g" name="calories_per_100g"
+                               value="{{if .Ingredient.CaloriesPer100g}}{{printf "%.0f" .Ingredient.CaloriesPer100g}}{{end}}"
+                               class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                               min="0" step="1" placeholder="kcal">
+                    </div>
+
+                    <div>
+                        <label for="protein_per_100g" class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Protein (g)
+                        </label>
+                        <input type="number" id="protein_per_100g" name="protein_per_100g"
+                               value="{{if .Ingredient.ProteinPer100g}}{{printf "%.1f" .Ingredient.ProteinPer100g}}{{end}}"
+                               class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                               min="0" step="0.1" placeholder="g">
+                    </div>
+
+                    <div>
+                        <label for="fat_per_100g" class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Fat (g)
+                        </label>
+                        <input type="number" id="fat_per_100g" name="fat_per_100g"
+                               value="{{if .Ingredient.FatPer100g}}{{printf "%.1f" .Ingredient.FatPer100g}}{{end}}"
+                               class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                               min="0" step="0.1" placeholder="g">
+                    </div>
+
+                    <div>
+                        <label for="carbs_per_100g" class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Carbs (g)
+                        </label>
+                        <input type="number" id="carbs_per_100g" name="carbs_per_100g"
+                               value="{{if .Ingredient.CarbsPer100g}}{{printf "%.1f" .Ingredient.CarbsPer100g}}{{end}}"
+                               class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                               min="0" step="0.1" placeholder="g">
+                    </div>
+
+                    <div>
+                        <label for="sugar_per_100g" class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Sugar (g)
+                        </label>
+                        <input type="number" id="sugar_per_100g" name="sugar_per_100g"
+                               value="{{if .Ingredient.SugarPer100g}}{{printf "%.1f" .Ingredient.SugarPer100g}}{{end}}"
+                               class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                               min="0" step="0.1" placeholder="g">
+                    </div>
+
+                    <div>
+                        <label for="fiber_per_100g" class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Fiber (g)
+                        </label>
+                        <input type="number" id="fiber_per_100g" name="fiber_per_100g"
+                               value="{{if .Ingredient.FiberPer100g}}{{printf "%.1f" .Ingredient.FiberPer100g}}{{end}}"
+                               class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                               min="0" step="0.1" placeholder="g">
+                    </div>
+
+                    <div>
+                        <label for="sodium_per_100g" class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Sodium (mg)
+                        </label>
+                        <input type="number" id="sodium_per_100g" name="sodium_per_100g"
+                               value="{{if .Ingredient.SodiumPer100g}}{{printf "%.0f" .Ingredient.SodiumPer100g}}{{end}}"
+                               class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                               min="0" step="1" placeholder="mg">
+                    </div>
+                </div>
+                <p class="mt-4 text-xs text-gray-500 dark:text-text-secondary">Optional: Enter nutrition values per 100g serving</p>
+            </div>
+
+            <div id="result" class="mb-4"></div>
+
+            <div class="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-200 dark:border-border-dark">
+                <button type="submit"
+                        class="flex items-center justify-center gap-2 rounded-lg bg-primary hover:bg-primary/90 text-white px-6 py-3 text-sm font-bold transition-all shadow-[0_0_15px_rgba(110,86,207,0.3)]">
+                    <span class="material-symbols-outlined text-xl">{{if .Ingredient.ID}}check{{else}}add{{end}}</span>
+                    <span>{{if .Ingredient.ID}}Update{{else}}Create{{end}} Ingredient</span>
+                </button>
+                <a href="/ingredients"
+                   class="flex items-center justify-center gap-2 rounded-lg bg-gray-100 dark:bg-surface-highlight hover:bg-gray-200 dark:hover:bg-border-dark text-gray-700 dark:text-white px-6 py-3 text-sm font-medium transition-colors">
+                    <span class="material-symbols-outlined text-xl">close</span>
+                    <span>Cancel</span>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Moisture type button handler
+    document.querySelectorAll('.moisture-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.getElementById('moisture-type-input').value = btn.dataset.value;
+
+            document.querySelectorAll('.moisture-btn').forEach(b => {
+                if (b === btn) {
+                    b.classList.remove('bg-white', 'dark:bg-surface-highlight', 'text-gray-600', 'dark:text-gray-300');
+                    b.classList.add('bg-primary', 'text-white');
+                } else {
+                    b.classList.remove('bg-primary', 'text-white');
+                    b.classList.add('bg-white', 'dark:bg-surface-highlight', 'text-gray-600', 'dark:text-gray-300');
+                }
+            });
+        });
+    });
+
+    // Handle form for edit mode - use PUT instead of POST
+    const form = document.getElementById('ingredient-form');
+    const ingredientId = form.querySelector('input[name="id"]');
+    if (ingredientId && ingredientId.value) {
+        form.setAttribute('hx-put', '/api/v1/ingredients/' + ingredientId.value);
+        form.removeAttribute('hx-post');
+        htmx.process(form);
+    }
+
+    // Handle HTMX error responses - show user-friendly error messages
+    document.body.addEventListener('htmx:responseError', function(event) {
+        const resultDiv = document.getElementById('result');
+        if (resultDiv && event.detail.target === resultDiv) {
+            let errorMsg = 'An error occurred. Please try again.';
+            try {
+                const response = JSON.parse(event.detail.xhr.responseText);
+                if (response.error && response.error.message) {
+                    errorMsg = response.error.message;
+                } else if (response.message) {
+                    errorMsg = response.message;
+                }
+            } catch (e) {
+                // Use default error message
+            }
+            resultDiv.innerHTML = '<div class="p-3 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">' +
+                '<span class="material-symbols-outlined text-sm align-middle mr-1">error</span>' + errorMsg + '</div>';
+        }
+    });
+});
+</script>
+{{end}}

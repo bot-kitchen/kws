@@ -14,12 +14,14 @@ import (
 )
 
 type ingredientRepository struct {
-	collection *mongo.Collection
+	collection        *mongo.Collection
+	recipesCollection *mongo.Collection
 }
 
 func NewIngredientRepository(db *database.MongoDB) repositories.IngredientRepository {
 	return &ingredientRepository{
-		collection: db.Collection(database.CollectionIngredients),
+		collection:        db.Collection(database.CollectionIngredients),
+		recipesCollection: db.Collection(database.CollectionRecipes),
 	}
 }
 
@@ -60,6 +62,11 @@ func (r *ingredientRepository) Delete(ctx context.Context, id primitive.ObjectID
 		bson.M{"_id": id},
 		bson.M{"$set": bson.M{"is_active": false, "updated_at": time.Now()}},
 	)
+	return err
+}
+
+func (r *ingredientRepository) HardDelete(ctx context.Context, id primitive.ObjectID) error {
+	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
 	return err
 }
 
@@ -116,4 +123,10 @@ func (r *ingredientRepository) GetByIDs(ctx context.Context, ids []primitive.Obj
 	}
 
 	return ingredients, nil
+}
+
+func (r *ingredientRepository) CountRecipesUsingIngredient(ctx context.Context, ingredientID primitive.ObjectID) (int64, error) {
+	// Count recipes that have this ingredient in their ingredients array
+	query := bson.M{"ingredients.ingredient_id": ingredientID}
+	return r.recipesCollection.CountDocuments(ctx, query)
 }
