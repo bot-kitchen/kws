@@ -1,7 +1,7 @@
 = KWS (Kitchen Web Service) Technical Design Document
 :author: Arun Chandrasekaran
 :revnumber: 1.0
-:revdate: December 2024
+:revdate: December 2025
 :status: Draft
 :toc: left
 :toclevels: 3
@@ -13,7 +13,9 @@
 
 === Purpose
 
-This Technical Design Document (TDD) provides the detailed technical architecture, component design, and implementation specifications for the Kitchen Web Service (KWS). It translates the requirements from the KWS Requirements Document into actionable technical specifications.
+This Technical Design Document (TDD) provides the detailed technical architecture, component design,
+and implementation specifications for the Kitchen Web Service (KWS). It translates the requirements
+from the KWS Requirements Document into actionable technical specifications.
 
 === Scope
 
@@ -244,7 +246,8 @@ kws/
 
 === MongoDB Schema Design
 
-All data is stored in MongoDB with document references for relationships. This approach enables code reuse with KOS (which can adopt the same document models for recipes, ingredients, and orders).
+All data is stored in MongoDB with document references for relationships.
+This approach enables code reuse with KOS (which can adopt the same document models for recipes, ingredients, and orders).
 
 ==== Collections Overview
 
@@ -474,38 +477,50 @@ db.createCollection("recipes", {
         difficulty: {
           enum: ["easy", "medium", "hard"]
         },
+        // Recipe steps aligned with KOS recipe_step table
+        // Each step maps to an L4 action in KOS orchestrator
         steps: {
           bsonType: "array",
           items: {
             bsonType: "object",
-            required: ["sequence", "instruction"],
+            required: ["step_number", "action"],
             properties: {
-              sequence: { bsonType: "int" },
-              instruction: { bsonType: "string" },
-              duration_seconds: { bsonType: "int" },
-              equipment_type: { bsonType: "string" },
-              temperature: {
-                bsonType: "object",
-                properties: {
-                  value: { bsonType: "double" },
-                  unit: { enum: ["celsius", "fahrenheit"] }
-                }
+              step_number: {
+                bsonType: "int",
+                description: "Sequential order (1,2,3...), must be unique per recipe"
               },
-              ingredients: {
+              action: {
+                enum: [
+                  "add_liquid",              // Dispense liquid from hydra to pot
+                  "add_solid",               // Add solid ingredient from canister to pot
+                  "agitate",                 // Spiral grinder stirs/grinds contents
+                  "heat",                    // Pyro heats pot at specified power level
+                  "open_pot_lid",            // Thor opens pot lid
+                  "close_pot_lid",           // Thor closes pot lid
+                  "pick_ingredient",         // Pick canister from storage (hulk)
+                  "place_ingredient",        // Return canister to storage (hulk)
+                  "acquire_pot_from_staging", // KOS-generated: pick pot from staging
+                  "deliver_pot_to_serving"   // KOS-generated: deliver pot to serving
+                ],
+                description: "L4 action type that KOS orchestrator understands"
+              },
+              // Parameters JSON structure varies by action type:
+              // - add_liquid:  {ingredient_id, ingredient_name, metric: "ml", quantity}
+              // - add_solid:   {ingredient_id, ingredient_name, metric: "grams", quantity}
+              // - agitate:     {speed, duration_sec, direction}
+              //   speeds: "slow_stir", "med_stir", "fast_stir", "coarse_grind"
+              //   directions: "scraping", "cutting"
+              // - heat:        {power_level, on_duration_sec}
+              // - open_pot_lid, close_pot_lid: {} (no parameters)
+              parameters: { bsonType: "object" },
+              depends_on_steps: {
                 bsonType: "array",
-                items: {
-                  bsonType: "object",
-                  required: ["name", "quantity", "unit"],
-                  properties: {
-                    ingredient_id: { bsonType: "string" },
-                    name: { bsonType: "string" },
-                    quantity: { bsonType: "double" },
-                    unit: { bsonType: "string" },
-                    preparation: { bsonType: "string" }
-                  }
-                }
+                items: { bsonType: "int" },
+                description: "Parent step numbers; this step starts after all parents complete"
               },
-              parameters: { bsonType: "object" }
+              // KWS-only fields for recipe authoring UI (not synced to KOS)
+              name: { bsonType: "string" },
+              description: { bsonType: "string" }
             }
           }
         },
@@ -549,94 +564,208 @@ db.recipes.createIndex({ "name": "text", "description": "text" });
 
 ==== Example Recipe Document
 
+This example shows the Sambar recipe (id=4) from KOS database using L4 actions compatible with KOS orchestrator:
+
 [source,json]
 ----
 {
   "_id": ObjectId("..."),
   "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
-  "recipe_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
-  "name": "Butter Chicken",
-  "description": "Classic Indian butter chicken with creamy tomato sauce",
-  "version": 3,
+  "name": "Sambar",
+  "description": "Traditional South Indian lentil stew with vegetables",
+  "version": 1,
   "status": "published",
   "category": "main_course",
-  "tags": ["indian", "curry", "chicken", "creamy"],
-  "prep_time_seconds": 1800,
-  "cook_time_seconds": 2400,
-  "servings": 4,
-  "difficulty": "medium",
-  "steps": [
+  "estimated_prep_time_sec": 0,
+  "estimated_cooking_time_sec": 8000,
+  "allergen_warnings": [],
+  "ingredients": [
     {
-      "sequence": 1,
-      "instruction": "Marinate chicken with yogurt and spices",
-      "duration_seconds": 300,
-      "ingredients": [
-        {
-          "ingredient_id": "ing-001",
-          "name": "Chicken thighs",
-          "quantity": 500,
-          "unit": "g",
-          "preparation": "cubed"
-        },
-        {
-          "ingredient_id": "ing-002",
-          "name": "Yogurt",
-          "quantity": 100,
-          "unit": "ml"
-        }
-      ],
-      "parameters": {
-        "marination_time_minutes": 30
-      }
+      "ingredient_id": ObjectId("..."),
+      "ingredient_name": "coconut_milk",
+      "quantity_required": 50,
+      "unit": "ml",
+      "timing_step": 2,
+      "is_critical": true
     },
     {
-      "sequence": 2,
-      "instruction": "Cook marinated chicken in tandoor",
-      "duration_seconds": 600,
-      "equipment_type": "tandoor",
-      "temperature": {
-        "value": 220,
-        "unit": "celsius"
-      }
+      "ingredient_id": ObjectId("..."),
+      "ingredient_name": "water",
+      "quantity_required": 2000,
+      "unit": "ml",
+      "timing_step": 3,
+      "is_critical": true
     },
     {
-      "sequence": 3,
-      "instruction": "Prepare butter sauce and combine",
-      "duration_seconds": 900,
-      "equipment_type": "saucepan",
-      "ingredients": [
-        {
-          "name": "Butter",
-          "quantity": 50,
-          "unit": "g"
-        },
-        {
-          "name": "Tomato puree",
-          "quantity": 200,
-          "unit": "ml"
-        },
-        {
-          "name": "Heavy cream",
-          "quantity": 100,
-          "unit": "ml"
-        }
-      ]
+      "ingredient_id": ObjectId("..."),
+      "ingredient_name": "soaked_masuur",
+      "quantity_required": 500,
+      "unit": "grams",
+      "timing_step": 6,
+      "is_critical": true
+    },
+    {
+      "ingredient_id": ObjectId("..."),
+      "ingredient_name": "pumpkin_sambar_powder",
+      "quantity_required": 600,
+      "unit": "grams",
+      "timing_step": 12,
+      "is_critical": true
     }
   ],
-  "nutrition": {
-    "calories": 450,
-    "protein_g": 35.5,
-    "carbs_g": 12.0,
-    "fat_g": 28.0
-  },
+  "steps": [
+    {
+      "step_number": 1,
+      "action": "acquire_pot_from_staging",
+      "parameters": {},
+      "depends_on_steps": []
+    },
+    {
+      "step_number": 2,
+      "action": "add_liquid",
+      "parameters": {
+        "ingredient_id": 4,
+        "ingredient_name": "coconut_milk",
+        "metric": "ml",
+        "quantity": 50
+      },
+      "depends_on_steps": [1]
+    },
+    {
+      "step_number": 3,
+      "action": "add_liquid",
+      "parameters": {
+        "ingredient_id": 1,
+        "ingredient_name": "water",
+        "metric": "ml",
+        "quantity": 2000
+      },
+      "depends_on_steps": [2]
+    },
+    {
+      "step_number": 4,
+      "action": "heat",
+      "parameters": {
+        "power_level": 9,
+        "on_duration_sec": 900
+      },
+      "depends_on_steps": [3]
+    },
+    {
+      "step_number": 5,
+      "action": "pick_ingredient",
+      "parameters": {
+        "ingredient_id": 18,
+        "ingredient_name": "soaked_masuur"
+      },
+      "depends_on_steps": [4]
+    },
+    {
+      "step_number": 6,
+      "action": "add_solid",
+      "parameters": {
+        "ingredient_id": 18,
+        "ingredient_name": "soaked_masuur",
+        "metric": "grams",
+        "quantity": 500
+      },
+      "depends_on_steps": [5]
+    },
+    {
+      "step_number": 7,
+      "action": "place_ingredient",
+      "parameters": {
+        "ingredient_id": 18,
+        "ingredient_name": "soaked_masuur"
+      },
+      "depends_on_steps": [6]
+    },
+    {
+      "step_number": 8,
+      "action": "close_pot_lid",
+      "parameters": {},
+      "depends_on_steps": [6]
+    },
+    {
+      "step_number": 9,
+      "action": "heat",
+      "parameters": {
+        "power_level": 3,
+        "on_duration_sec": 1200
+      },
+      "depends_on_steps": [8]
+    },
+    {
+      "step_number": 10,
+      "action": "open_pot_lid",
+      "parameters": {},
+      "depends_on_steps": [9]
+    },
+    {
+      "step_number": 11,
+      "action": "pick_ingredient",
+      "parameters": {
+        "ingredient_id": 17,
+        "ingredient_name": "pumpkin_sambar_powder"
+      },
+      "depends_on_steps": [9]
+    },
+    {
+      "step_number": 12,
+      "action": "add_solid",
+      "parameters": {
+        "ingredient_id": 17,
+        "ingredient_name": "pumpkin_sambar_powder",
+        "metric": "grams",
+        "quantity": 600
+      },
+      "depends_on_steps": [11, 10]
+    },
+    {
+      "step_number": 13,
+      "action": "place_ingredient",
+      "parameters": {
+        "ingredient_id": 17,
+        "ingredient_name": "pumpkin_sambar_powder"
+      },
+      "depends_on_steps": [12]
+    },
+    {
+      "step_number": 14,
+      "action": "close_pot_lid",
+      "parameters": {},
+      "depends_on_steps": [12]
+    },
+    {
+      "step_number": 15,
+      "action": "agitate",
+      "parameters": {
+        "speed": "slow_stir",
+        "duration_sec": 30,
+        "direction": "scraping"
+      },
+      "depends_on_steps": [14]
+    },
+    {
+      "step_number": 16,
+      "action": "heat",
+      "parameters": {
+        "power_level": 3,
+        "on_duration_sec": 2100
+      },
+      "depends_on_steps": [15]
+    },
+    {
+      "step_number": 17,
+      "action": "deliver_pot_to_serving",
+      "parameters": {},
+      "depends_on_steps": [16]
+    }
+  ],
   "site_assignments": [
     {
       "site_id": "site-downtown",
       "assigned_at": ISODate("2024-12-01T00:00:00Z")
-    },
-    {
-      "site_id": "site-midtown",
-      "assigned_at": ISODate("2024-12-15T00:00:00Z")
     }
   ],
   "created_by": "user-chef-123",
@@ -2037,30 +2166,30 @@ KOS devices authenticate to KWS using a dual-layer security model that combines 
 │                    DUAL-LAYER AUTHENTICATION                        │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  ┌──────────┐         ┌──────────┐         ┌──────────────────────┐│
-│  │   KOS    │  mTLS   │  Nginx   │  HTTP   │        KWS           ││
-│  │ Instance │◄───────►│ (TLS     │◄───────►│   Application        ││
-│  │          │         │  Term)   │         │                      ││
-│  └──────────┘         └──────────┘         └──────────────────────┘│
+│  ┌──────────┐         ┌──────────┐         ┌──────────────────────┐ │
+│  │   KOS    │  mTLS   │  Nginx   │  HTTP   │        KWS           │ │
+│  │ Instance │◄───────►│ (TLS     │◄───────►│   Application        │ │
+│  │          │         │  Term)   │         │                      │ │
+│  └──────────┘         └──────────┘         └──────────────────────┘ │
 │       │                    │                        │               │
 │       │                    ▼                        ▼               │
-│       │           ┌────────────────┐      ┌─────────────────────┐  │
-│       │           │ Verify Client  │      │ Verify JWT Token    │  │
-│       │           │ Certificate    │      │ - Valid signature   │  │
-│       │           │ - Valid CA     │      │ - Not expired       │  │
-│       │           │ - Not revoked  │      │ - Correct tenant    │  │
-│       │           │ - Extract CN   │      │ - Site matches cert │  │
-│       │           └────────────────┘      └─────────────────────┘  │
+│       │           ┌────────────────┐      ┌─────────────────────┐   │
+│       │           │ Verify Client  │      │ Verify JWT Token    │   │
+│       │           │ Certificate    │      │ - Valid signature   │   │
+│       │           │ - Valid CA     │      │ - Not expired       │   │
+│       │           │ - Not revoked  │      │ - Correct tenant    │   │
+│       │           │ - Extract CN   │      │ - Site matches cert │   │
+│       │           └────────────────┘      └─────────────────────┘   │
 │       │                                                             │
 │       ▼                                                             │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │                      Keycloak                                 │  │
-│  │  ┌─────────────────┐  ┌─────────────────────────────────┐    │  │
-│  │  │ Service Account │  │ Token Endpoint                  │    │  │
-│  │  │ per KOS Device  │  │ /realms/{tenant}/protocol/      │    │  │
-│  │  │                 │  │    openid-connect/token         │    │  │
-│  │  └─────────────────┘  └─────────────────────────────────┘    │  │
-│  └──────────────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │                      Keycloak                                │   │
+│  │  ┌─────────────────┐  ┌─────────────────────────────────┐    │   │
+│  │  │ Service Account │  │ Token Endpoint                  │    │   │
+│  │  │ per KOS Device  │  │ /realms/{tenant}/protocol/      │    │   │
+│  │  │                 │  │    openid-connect/token         │    │   │
+│  │  └─────────────────┘  └─────────────────────────────────┘    │   │
+│  └──────────────────────────────────────────────────────────────┘   │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 
@@ -2596,60 +2725,60 @@ func (k *KeycloakAdmin) addClaimsMapper(ctx context.Context, realm, clientUUID, 
 [source]
 ----
 ┌────────────────────────────────────────────────────────────────────────────────┐
-│                          KOS REGISTRATION FLOW                                  │
+│                          KOS REGISTRATION FLOW                                 │
 ├────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                │
 │  Step 1: Admin creates KOS instance in KWS UI                                  │
 │  ┌──────────────────────────────────────────────────────────────────────────┐  │
 │  │  POST /api/v1/admin/kos-instances                                        │  │
-│  │  {                                                                        │  │
-│  │    "site_id": "uuid",                                                     │  │
-│  │    "name": "Downtown Kitchen KOS"                                         │  │
-│  │  }                                                                        │  │
+│  │  {                                                                       │  │
+│  │    "site_id": "uuid",                                                    │  │
+│  │    "name": "Downtown Kitchen KOS"                                        │  │
+│  │  }                                                                       │  │
 │  └──────────────────────────────────────────────────────────────────────────┘  │
-│                                    │                                            │
-│                                    ▼                                            │
+│                                    │                                           │
+│                                    ▼                                           │
 │  Step 2: KWS generates credentials                                             │
 │  ┌──────────────────────────────────────────────────────────────────────────┐  │
 │  │  a) Generate client certificate (valid 1 year)                           │  │
-│  │  b) Create Keycloak service account                                       │  │
+│  │  b) Create Keycloak service account                                      │  │
 │  │  c) Generate registration token (one-time use, expires in 24h)           │  │
 │  └──────────────────────────────────────────────────────────────────────────┘  │
-│                                    │                                            │
-│                                    ▼                                            │
+│                                    │                                           │
+│                                    ▼                                           │
 │  Step 3: Admin downloads provisioning bundle                                   │
 │  ┌──────────────────────────────────────────────────────────────────────────┐  │
 │  │  GET /api/v1/admin/kos-instances/{id}/provisioning-bundle                │  │
 │  │                                                                          │  │
 │  │  Returns: kos-credentials.zip containing:                                │  │
 │  │    - client.crt (client certificate)                                     │  │
-│  │    - client.key (private key) [SENSITIVE]                               │  │
-│  │    - ca.crt (CA certificate for verification)                           │  │
-│  │    - kws-config.yaml (Keycloak credentials + KWS URL)                   │  │
+│  │    - client.key (private key) [SENSITIVE]                                │  │
+│  │    - ca.crt (CA certificate for verification)                            │  │
+│  │    - kws-config.yaml (Keycloak credentials + KWS URL)                    │  │
 │  └──────────────────────────────────────────────────────────────────────────┘  │
-│                                    │                                            │
-│                                    ▼                                            │
+│                                    │                                           │
+│                                    ▼                                           │
 │  Step 4: Admin installs bundle on KOS                                          │
 │  ┌──────────────────────────────────────────────────────────────────────────┐  │
 │  │  # On KOS server                                                         │  │
-│  │  kos configure kws --bundle /path/to/kos-credentials.zip                │  │
+│  │  kos configure kws --bundle /path/to/kos-credentials.zip                 │  │
 │  │                                                                          │  │
 │  │  This:                                                                   │  │
-│  │    - Extracts certificates to /etc/kos/certs/                           │  │
-│  │    - Updates KOS config with KWS connection settings                    │  │
+│  │    - Extracts certificates to /etc/kos/certs/                            │  │
+│  │    - Updates KOS config with KWS connection settings                     │  │
 │  │    - Tests connectivity                                                  │  │
 │  └──────────────────────────────────────────────────────────────────────────┘  │
-│                                    │                                            │
-│                                    ▼                                            │
+│                                    │                                           │
+│                                    ▼                                           │
 │  Step 5: KOS confirms registration                                             │
 │  ┌──────────────────────────────────────────────────────────────────────────┐  │
 │  │  POST /api/v1/kos/register (via mTLS)                                    │  │
-│  │  Authorization: Bearer {jwt_token}                                        │  │
-│  │  {                                                                        │  │
+│  │  Authorization: Bearer {jwt_token}                                       │  │
+│  │  {                                                                       │  │
 │  │    "registration_token": "one-time-token",                               │  │
 │  │    "kos_version": "1.2.0",                                               │  │
 │  │    "kitchens": [...]                                                     │  │
-│  │  }                                                                        │  │
+│  │  }                                                                       │  │
 │  │                                                                          │  │
 │  │  Response: { "status": "registered", "sync_enabled": true }              │  │
 │  └──────────────────────────────────────────────────────────────────────────┘  │

@@ -24,14 +24,16 @@ type CreateRecipeRequest struct {
 	Parameters  map[string]any            `json:"parameters"`
 }
 
+// RecipeStepRequest represents a recipe step in API requests
+// Action must be one of: add_liquid, add_solid, agitate, heat, open_pot_lid, close_pot_lid
+// Parameters structure depends on action type (see models.RecipeStep documentation)
 type RecipeStepRequest struct {
-	StepNumber     int            `json:"step_number"`        // Sequential order (1,2,3...)
-	Action         string         `json:"action"`             // add_liquid, add_solids, etc.
-	Name           string         `json:"name,omitempty"`     // Human-readable name
-	Description    string         `json:"description,omitempty"`
-	DeviceType     string         `json:"device_type,omitempty"`
-	Parameters     map[string]any `json:"parameters,omitempty"`
-	DependsOnSteps []int          `json:"depends_on_steps,omitempty"`
+	StepNumber     int            `json:"step_number" binding:"required,min=1"` // Sequential order (1,2,3...)
+	Action         string         `json:"action" binding:"required"`            // L4 action type
+	Parameters     map[string]any `json:"parameters,omitempty"`                 // Action-specific parameters
+	DependsOnSteps []int          `json:"depends_on_steps,omitempty"`           // Parent step numbers
+	Name           string         `json:"name,omitempty"`                       // Human-readable name (KWS-only)
+	Description    string         `json:"description,omitempty"`                // Step description (KWS-only)
 }
 
 type RecipeIngredientRequest struct {
@@ -102,12 +104,11 @@ func (a *Application) createRecipe(c *gin.Context) {
 	for i, s := range req.Steps {
 		steps[i] = models.RecipeStep{
 			StepNumber:     s.StepNumber,
-			Action:         s.Action,
-			Name:           s.Name,
-			Description:    s.Description,
-			DeviceType:     s.DeviceType,
+			Action:         models.L4Action(s.Action),
 			Parameters:     s.Parameters,
 			DependsOnSteps: s.DependsOnSteps,
+			Name:           s.Name,
+			Description:    s.Description,
 		}
 	}
 
@@ -222,12 +223,11 @@ func (a *Application) updateRecipe(c *gin.Context) {
 		for i, s := range req.Steps {
 			steps[i] = models.RecipeStep{
 				StepNumber:     s.StepNumber,
-				Action:         s.Action,
-				Name:           s.Name,
-				Description:    s.Description,
-				DeviceType:     s.DeviceType,
+				Action:         models.L4Action(s.Action),
 				Parameters:     s.Parameters,
 				DependsOnSteps: s.DependsOnSteps,
+				Name:           s.Name,
+				Description:    s.Description,
 			}
 		}
 		recipe.Steps = steps
