@@ -126,3 +126,60 @@ KOS devices authenticate using dual-layer security:
 - **KOS**: Kitchen Operating System (on-premise, MariaDB)
   - Location: `~/src/ak/kos`
   - Communication: REST API polling
+
+## Recent Implementation Decisions (Dec 2025)
+
+### KOS-KWS Integration Architecture
+
+#### KOS Identity Management (SOP-003)
+- KOS ID is auto-generated (UUID) on first startup and stored in local MariaDB database
+- The KOS ID persists across container restarts and application upgrades
+- No identity information stored in config files - all in `system_config` table
+- KOS uses `X-KOS-ID` header in all API calls to KWS
+
+#### mTLS Authentication
+- KOS authenticates to KWS using mutual TLS client certificates
+- Certificates are issued during KOS provisioning
+- Certificate paths configured in KOS: `certificate_path`, `private_key_path`, `ca_certificate_path`
+- No API keys to rotate - certificate-based identity
+
+#### Single Recipe Per Order
+- Each order contains exactly one recipe (simplified from multi-item orders)
+- `OrderForKOS` struct has `recipe_id` and `recipe_name` fields directly
+- Simplifies order processing and KOS queue management
+
+#### Recipe Versioning
+- Recipes have monotonically increasing `version` field
+- When KOS detects version increase during sync:
+  1. Deletes existing recipe ingredients
+  2. Deletes existing recipe steps
+  3. Updates recipe metadata
+  4. Recreates ingredients and steps from KWS data
+- This ensures recipe changes are fully propagated
+
+### KWS Configuration Strategy
+- `config/config.yaml` - Local development (gitignored)
+- `config/config.prod.yaml` - Production defaults (committed to git)
+- Docker uses `config.prod.yaml` copied as `config.yaml` in container
+- Environment variables override with `KWS_` prefix
+
+### Docker Compose Services
+- `kws` - Main application (port 8000:8080)
+- `mongodb` - Application data (port 27017)
+- `postgres` - Keycloak database
+- `keycloak` - IAM (port 8180:8080)
+- `nginx` - Reverse proxy (production profile only)
+
+## Documentation
+
+Comprehensive documentation in `docs/`:
+- `KWS-Requirements-Document.adoc` - System requirements, SOPs, architecture decisions
+- `KWS-Functional-Specification.adoc` - User features, workflows, business rules
+- `KWS-Technical-Design.adoc` - MongoDB schemas, API specs, deployment
+
+### Standard Operating Procedures
+| SOP | Description |
+|-----|-------------|
+| SOP-001 | Recipe Authority: KWS is single source of truth. Recipe version increases trigger full re-sync. |
+| SOP-002 | Order Routing: Every order must specify region and site. Single recipe per order. |
+| SOP-003 | KOS Identity: Auto-generated UUID stored in database. mTLS for authentication. |
