@@ -1,0 +1,30 @@
+{{define "title"}}Tenant Detail - KWS{{end}}
+{{define "page-title"}}Tenant Detail{{end}}
+
+{{define "content"}}
+<div class="space-y-6">
+    <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-6">
+        <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">{{.Tenant.Name}}</h2>
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary">Code</p>
+                <p class="text-gray-900 dark:text-white">{{.Tenant.Code}}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary">Plan</p>
+                <p class="text-gray-900 dark:text-white">{{.Tenant.Plan}}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary">Status</p>
+                <p class="text-gray-900 dark:text-white">{{.Tenant.Status}}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary">Sites</p>
+                <p class="text-gray-900 dark:text-white">{{.Tenant.SiteCount}}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}{{end}}

@@ -1,0 +1,498 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles layer */
+@layer base {
+
+  /* Hide number input spinners and prevent scroll-to-change */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  /* Scrollbar styling — Light theme */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #f3f4f6;
+    /* gray-100 for light theme */
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    /* gray-300 for light theme */
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #6E56CF;
+    /* primary */
+  }
+
+  /* Scrollbar styling — Dark theme */
+  .dark ::-webkit-scrollbar-track {
+    background: #0E0F14;
+    /* background-dark */
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background: #1C1F26;
+    /* surface-highlight */
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: #6E56CF;
+    /* primary */
+  }
+
+  /* Prevent white flash */
+  html.dark,
+  html.dark body {
+    background-color: #0E0F14 !important;
+  }
+
+  html:not(.dark),
+  html:not(.dark) body {
+    background-color: #F7F7F9 !important;
+  }
+
+  body {
+    transition: background-color 0.15s ease-in-out;
+  }
+
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+}
+
+@layer components {
+
+  /* Animations unchanged */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+
+  @keyframes slideInRight {
+    from {
+      opacity: 0;
+      transform: translateX(100%);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .slide-in-right {
+    animation: slideInRight 0.3s ease-out;
+  }
+
+  /* HTMX transitions */
+  .htmx-swapping {
+    opacity: 0;
+    transition: opacity 0.2s ease-out;
+  }
+
+  .htmx-settling {
+    opacity: 1;
+    transition: opacity 0.2s ease-in;
+  }
+
+  /* Toast — keep original colors */
+  .toast {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 9999;
+    min-width: 300px;
+    max-width: 500px;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    animation: slideInRight 0.3s ease-out;
+  }
+
+  .toast-success {
+    background-color: #10b981;
+    color: white;
+  }
+
+  .toast-error {
+    background-color: #ef4444;
+    color: white;
+  }
+
+  .toast-warning {
+    background-color: #f59e0b;
+    color: white;
+  }
+
+  .toast-info {
+    background-color: #3b82f6;
+    color: white;
+  }
+
+  /* Tom Select styling */
+  .ts-wrapper.single .ts-control {
+    background-color: rgb(249 250 251);
+    /* bg-gray-50 */
+    border-color: rgb(209 213 219);
+    /* border-gray-300 */
+    border-radius: 0.5rem;
+    padding: 0.625rem 1rem;
+    min-height: 2.75rem;
+  }
+
+  .ts-wrapper.single .ts-control input {
+    font-size: 1rem;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+    background: transparent !important;
+  }
+
+  .ts-dropdown {
+    border-radius: 0.5rem;
+    border-color: rgb(229 231 235);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    margin-top: 4px;
+  }
+
+  .ts-dropdown .option {
+    padding: 0.625rem 1rem;
+  }
+
+  .ts-dropdown .option.active {
+    background-color: rgba(110, 86, 207, 0.1);
+    /* primary/10 */
+    color: #6E56CF;
+    /* primary */
+  }
+
+  .ts-dropdown .option:hover {
+    background-color: rgb(243 244 246);
+    /* bg-gray-100 */
+  }
+
+  /* Tom Select dark mode styling */
+  .dark .ts-wrapper.single .ts-control {
+    background-color: #1C1F26;
+    /* surface-highlight */
+    border-color: #2A2D36;
+    /* border-dark */
+    color: #EDEEF2;
+  }
+
+  .dark .ts-wrapper.single .ts-control input {
+    color: #EDEEF2;
+  }
+
+  .dark .ts-wrapper.single .ts-control input::placeholder {
+    color: #8D8FA3;
+  }
+
+  /* Tom Select multi-select dark mode styling */
+  .dark .ts-wrapper.multi .ts-control {
+    background-color: #1C1F26;
+    /* surface-highlight */
+    border-color: #2A2D36;
+    /* border-dark */
+    color: #EDEEF2;
+  }
+
+  .dark .ts-wrapper.multi .ts-control input {
+    color: #EDEEF2;
+    background-color: transparent;
+  }
+
+  .dark .ts-wrapper.multi .ts-control input::placeholder {
+    color: #8D8FA3;
+  }
+
+  .dark .ts-wrapper.multi .ts-control .item {
+    background-color: rgba(110, 86, 207, 0.2);
+    color: #EDEEF2;
+    border-color: #6E56CF;
+  }
+
+  /* Tom Select - Generic dark mode overrides for all wrapper types */
+  .dark .ts-wrapper .ts-control {
+    background-color: #1C1F26 !important;
+    border-color: #2A2D36 !important;
+    color: #EDEEF2 !important;
+  }
+
+  .dark .ts-wrapper .ts-control>input {
+    color: #EDEEF2 !important;
+    background: transparent !important;
+  }
+
+  .dark .ts-wrapper .ts-control>input::placeholder {
+    color: #8D8FA3 !important;
+  }
+
+  .dark .ts-dropdown {
+    background-color: #15171C;
+    /* surface-dark */
+    border-color: #2A2D36;
+  }
+
+  .dark .ts-dropdown .option {
+    color: #EDEEF2;
+  }
+
+  .dark .ts-dropdown .option.active {
+    background-color: rgba(110, 86, 207, 0.2);
+    color: #6E56CF;
+  }
+
+  .dark .ts-dropdown .option:hover {
+    background-color: #1C1F26;
+  }
+
+  .dark .ts-dropdown .no-results {
+    color: #8D8FA3;
+  }
+
+  /* Focus states */
+  .ts-wrapper.focus .ts-control {
+    border-color: #6E56CF;
+    box-shadow: 0 0 0 2px rgba(110, 86, 207, 0.2);
+  }
+
+  /* Action group error state */
+  .action-group.action-error {
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    border: 2px solid #ef4444;
+    background-color: rgba(239, 68, 68, 0.05);
+  }
+
+  .dark .action-group.action-error {
+    background-color: rgba(239, 68, 68, 0.1);
+  }
+}
+
+/* Frappe Gantt Styles - Outside Tailwind layers to prevent processing issues */
+
+/* Hide the horizontal scrollbar */
+.gantt-container {
+  overflow-x: hidden !important;
+  overflow: hidden !important;
+}
+
+/* Hide date/month headers */
+.grid-header {
+  display: none !important;
+}
+
+.upper-header,
+.lower-header,
+.side-header {
+  display: none !important;
+}
+
+/* Hide header text elements */
+.upper-text,
+.lower-text {
+  display: none !important;
+}
+
+/* Light Mode Colors */
+.gantt {
+  background: transparent;
+}
+
+.gantt .grid-background {
+  fill: transparent;
+}
+
+.gantt .grid-row {
+  fill: transparent;
+}
+
+.gantt .row-line {
+  stroke: transparent !important;
+}
+
+/* Hide all vertical grid lines (ticks) */
+.gantt .tick,
+.gantt .tick.thick {
+  stroke: transparent !important;
+  display: none !important;
+}
+
+/* Hide today/current date highlights */
+.gantt .today-highlight,
+.gantt .current-highlight,
+.gantt .current-date-highlight,
+.gantt .current-ball-highlight,
+.gantt .date-range-highlight {
+  display: none !important;
+  fill: transparent !important;
+  stroke: transparent !important;
+}
+
+/* Hide weekend/holiday highlights */
+.gantt .highlight-weekend,
+.gantt .highlight-holiday,
+.gantt .weekend-highlight-color,
+.gantt [class*="highlight"] {
+  fill: transparent !important;
+  display: none !important;
+}
+
+/* Hide any highlight rectangles */
+.gantt rect[class*="highlight"] {
+  fill: transparent !important;
+  display: none !important;
+}
+
+/* Hide vertical border/stroke on the SVG */
+.gantt svg {
+  border: none !important;
+}
+
+/* Hide grid strokes */
+.gantt .grid,
+.gantt .grid * {
+  stroke: transparent !important;
+}
+
+/* Bar colors - custom_class is applied to .bar-wrapper, .bar is child rect */
+.gantt .bar-wrapper .bar {
+  fill: #6e56cf !important;
+}
+
+.gantt .bar-wrapper .bar-label {
+  fill: #1f2937 !important;
+  font-size: 12px;
+}
+
+.gantt .bar-wrapper.bar-blue .bar {
+  fill: #3b82f6 !important;
+}
+
+.gantt .bar-wrapper.bar-red .bar {
+  fill: #ef4444 !important;
+}
+
+.gantt .bar-wrapper.bar-green .bar {
+  fill: #22c55e !important;
+}
+
+.gantt .bar-wrapper.bar-yellow .bar {
+  fill: #eab308 !important;
+}
+
+.gantt .bar-wrapper.bar-gray .bar {
+  fill: #9ca3af !important;
+}
+
+.gantt .bar-wrapper.bar-milestone .bar {
+  fill: #8b5cf6 !important;
+}
+
+.gantt .arrow {
+  stroke: #72e83c;
+  fill: none;
+}
+
+/* Dark Mode Colors */
+.dark .gantt .grid-background {
+  fill: transparent !important;
+}
+
+.dark .gantt .grid-row {
+  fill: transparent !important;
+}
+
+.dark .gantt .row-line {
+  stroke: transparent !important;
+}
+
+.dark .gantt .tick,
+.dark .gantt .tick.thick {
+  stroke: transparent !important;
+  display: none !important;
+}
+
+/* Dark mode: hide all highlights */
+.dark .gantt .today-highlight,
+.dark .gantt .current-highlight,
+.dark .gantt .current-date-highlight,
+.dark .gantt .current-ball-highlight,
+.dark .gantt .date-range-highlight,
+.dark .gantt [class*="highlight"] {
+  display: none !important;
+  fill: transparent !important;
+  stroke: transparent !important;
+}
+
+.dark .gantt svg {
+  border: none !important;
+}
+
+.dark .gantt .grid,
+.dark .gantt .grid * {
+  stroke: transparent !important;
+}
+
+.dark .gantt .bar-wrapper .bar-label {
+  fill: #1f2937 !important;
+}
+
+.dark .gantt .bar-wrapper.bar-blue .bar {
+  fill: #60a5fa !important;
+}
+
+.dark .gantt .bar-wrapper.bar-red .bar {
+  fill: #f87171 !important;
+}
+
+.dark .gantt .bar-wrapper.bar-green .bar {
+  fill: #4ade80 !important;
+}
+
+.dark .gantt .bar-wrapper.bar-yellow .bar {
+  fill: #fbbf24 !important;
+}
+
+.dark .gantt .bar-wrapper.bar-gray .bar {
+  fill: #6b7280 !important;
+}
+
+.dark .gantt .bar-wrapper.bar-milestone .bar {
+  fill: #a78bfa !important;
+}
+
+.dark .gantt .arrow {
+  stroke: #4b5563 !important;
+}
+
+.dark .gantt text {
+  fill: #1f2937 !important;
+}

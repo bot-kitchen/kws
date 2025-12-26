@@ -1,0 +1,304 @@
+{{define "title"}}Orders - KWS{{end}}
+{{define "page-title"}}Orders{{end}}
+
+{{define "content"}}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <p class="text-gray-500 dark:text-gray-400">Track orders across all sites</p>
+        </div>
+        <a href="/orders/new"
+           class="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors shadow-lg shadow-primary-600/20">
+            <span class="material-symbols-outlined mr-2">add</span>
+            Create Order
+        </a>
+    </div>
+
+    <!-- Stats Cards (clickable filters) -->
+    <div id="stats-filters" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+        <button type="button" data-filter="all" class="stats-filter bg-white dark:bg-surface-dark rounded-xl shadow-sm border-2 border-primary-600 p-4 text-left cursor-pointer transition-colors">
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{.Stats.Total}}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Total</p>
+        </button>
+        <button type="button" data-filter="pending" class="stats-filter bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4 text-left cursor-pointer hover:border-yellow-400 transition-colors">
+            <p class="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{{.Stats.Pending}}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Pending</p>
+        </button>
+        <button type="button" data-filter="sent_to_kos" class="stats-filter bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4 text-left cursor-pointer hover:border-purple-400 transition-colors">
+            <p class="text-2xl font-bold text-purple-600 dark:text-purple-400">{{.Stats.SentToKOS}}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Sent to KOS</p>
+        </button>
+        <button type="button" data-filter="in_progress" class="stats-filter bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4 text-left cursor-pointer hover:border-blue-400 transition-colors">
+            <p class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{.Stats.InProgress}}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">In Progress</p>
+        </button>
+        <button type="button" data-filter="completed" class="stats-filter bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4 text-left cursor-pointer hover:border-green-400 transition-colors">
+            <p class="text-2xl font-bold text-green-600 dark:text-green-400">{{.Stats.Completed}}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Completed</p>
+        </button>
+        <button type="button" data-filter="failed" class="stats-filter bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4 text-left cursor-pointer hover:border-red-400 transition-colors">
+            <p class="text-2xl font-bold text-red-600 dark:text-red-400">{{.Stats.Failed}}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Failed</p>
+        </button>
+    </div>
+
+    <!-- Toolbar: Search, Sort, Site Filter -->
+    <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4">
+        <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+            <!-- Search Bar -->
+            <div class="relative flex-1">
+                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">search</span>
+                <input type="text" id="search-orders" placeholder="Search by order reference, recipe, or customer..."
+                       class="w-full pl-10 pr-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-border-dark bg-gray-50 dark:bg-surface-highlight text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+            <!-- Site Filter -->
+            <select id="filter-site" class="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-border-dark bg-gray-50 dark:bg-surface-highlight text-gray-900 dark:text-white focus:ring-2 focus:ring-primary">
+                <option value="">All Sites</option>
+                {{range .Sites}}
+                <option value="{{.ID}}">{{.Name}}</option>
+                {{end}}
+            </select>
+            <!-- Sort -->
+            <select id="sort-orders" class="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-border-dark bg-gray-50 dark:bg-surface-highlight text-gray-900 dark:text-white focus:ring-2 focus:ring-primary">
+                <option value="created_desc">Newest First</option>
+                <option value="created_asc">Oldest First</option>
+                <option value="priority_desc">Priority (High-Low)</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Orders Grid -->
+    {{if .Orders}}
+    <div id="orders-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {{range .Orders}}
+        <div class="order-card bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl overflow-hidden hover:shadow-lg transition-all duration-200 {{if eq .Status "in_progress"}}ring-2 ring-blue-500/50{{end}}"
+             data-reference="{{.OrderReference}}" data-status="{{.Status}}" data-site="{{.SiteID}}" data-recipe="{{.RecipeName}}" data-customer="{{.CustomerName}}" data-priority="{{.Priority}}" data-created="{{.CreatedAtUnix}}">
+
+            {{if eq .Status "in_progress"}}
+            <div class="h-1 bg-gradient-to-r from-primary-600 via-blue-500 to-primary-600 animate-pulse"></div>
+            {{end}}
+
+            <div class="p-4">
+                <!-- Header: Reference + Status -->
+                <div class="flex items-center justify-between mb-3">
+                    <a href="/orders/{{.ID}}" class="text-sm font-mono font-bold text-gray-900 dark:text-white hover:text-primary transition-colors">
+                        {{.OrderReference}}
+                    </a>
+                    <span class="px-2 py-0.5 text-xs font-medium rounded-full
+                        {{if eq .Status "completed"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
+                        {{else if eq .Status "in_progress"}}bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400
+                        {{else if eq .Status "sent_to_kos"}}bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400
+                        {{else if eq .Status "failed"}}bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400
+                        {{else if eq .Status "cancelled"}}bg-gray-100 dark:bg-surface-highlight text-gray-600 dark:text-gray-300
+                        {{else}}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400{{end}}">
+                        {{if eq .Status "in_progress"}}cooking{{else if eq .Status "sent_to_kos"}}sent{{else}}{{.Status}}{{end}}
+                    </span>
+                </div>
+
+                <!-- Recipe -->
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="material-symbols-outlined text-primary text-lg">restaurant</span>
+                    <span class="text-sm font-medium text-gray-900 dark:text-white truncate">{{.RecipeName}}</span>
+                </div>
+
+                <!-- Site & Customer -->
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    <span class="flex items-center gap-1">
+                        <span class="material-symbols-outlined text-xs">location_on</span>
+                        {{.SiteName}}
+                    </span>
+                    {{if .CustomerName}}
+                    <span class="flex items-center gap-1">
+                        <span class="material-symbols-outlined text-xs">person</span>
+                        {{.CustomerName}}
+                    </span>
+                    {{end}}
+                </div>
+
+                <!-- Footer -->
+                <div class="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-border-dark">
+                    <div class="flex items-center gap-2 text-xs text-gray-400">
+                        {{if .Priority}}<span class="px-1.5 py-0.5 bg-gray-100 dark:bg-surface-highlight rounded font-medium">P{{.Priority}}</span>{{end}}
+                        <span>{{.CreatedAt}}</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <a href="/orders/{{.ID}}" class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-primary transition-colors" title="View">
+                            <span class="material-symbols-outlined text-sm">visibility</span>
+                        </a>
+                        {{if eq .Status "pending"}}
+                        <button onclick="cancelOrder('{{.ID}}', '{{.OrderReference}}')" class="p-1.5 rounded-lg text-gray-400 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 transition-colors" title="Cancel">
+                            <span class="material-symbols-outlined text-sm">cancel</span>
+                        </button>
+                        {{end}}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {{end}}
+    </div>
+    {{else}}
+    <div class="flex flex-col items-center justify-center py-16 bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl">
+        <div class="bg-gray-100 dark:bg-surface-highlight p-4 rounded-full mb-4">
+            <span class="material-symbols-outlined text-4xl text-gray-400">receipt_long</span>
+        </div>
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">No orders found</h3>
+        <p class="text-gray-500 dark:text-gray-400 mb-6">Orders will appear here when created</p>
+        <a href="/orders/new"
+           class="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover">
+            <span class="material-symbols-outlined mr-2">add</span>
+            Create Order
+        </a>
+    </div>
+    {{end}}
+</div>
+
+<!-- Cancel Modal -->
+<div id="cancel-modal" class="fixed inset-0 z-50 hidden">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black/50" onclick="closeCancelModal()"></div>
+        <div class="relative bg-white dark:bg-surface-dark rounded-xl shadow-xl w-full max-w-md p-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                    <span class="material-symbols-outlined text-red-600 dark:text-red-400">cancel</span>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Cancel Order</h3>
+            </div>
+            <p class="text-gray-600 dark:text-gray-400 mb-4">
+                Are you sure you want to cancel order <span id="cancel-order-ref" class="font-semibold text-gray-900 dark:text-white"></span>?
+            </p>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Reason (optional)</label>
+                <textarea id="cancel-reason" rows="2" class="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-border-dark bg-gray-50 dark:bg-surface-highlight text-gray-900 dark:text-white focus:ring-2 focus:ring-primary" placeholder="Enter cancellation reason..."></textarea>
+            </div>
+            <input type="hidden" id="cancel-order-id">
+            <div class="flex gap-3">
+                <button type="button" onclick="closeCancelModal()"
+                        class="flex-1 py-2 px-4 rounded-lg bg-gray-100 dark:bg-surface-highlight hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-white text-sm font-medium transition-colors">
+                    Keep Order
+                </button>
+                <button type="button" onclick="confirmCancel()"
+                        class="flex-1 py-2 px-4 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition-colors">
+                    Cancel Order
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+let currentStatusFilter = 'all';
+let currentSiteFilter = '';
+let currentSearch = '';
+
+function filterOrders() {
+    const searchTerm = currentSearch.toLowerCase();
+
+    document.querySelectorAll('.order-card').forEach(card => {
+        const reference = (card.dataset.reference || '').toLowerCase();
+        const recipe = (card.dataset.recipe || '').toLowerCase();
+        const customer = (card.dataset.customer || '').toLowerCase();
+        const status = card.dataset.status || '';
+        const site = card.dataset.site || '';
+
+        const matchesStatus = currentStatusFilter === 'all' || status === currentStatusFilter;
+        const matchesSite = !currentSiteFilter || site === currentSiteFilter;
+        const matchesSearch = !searchTerm ||
+            reference.includes(searchTerm) ||
+            recipe.includes(searchTerm) ||
+            customer.includes(searchTerm);
+
+        card.style.display = matchesStatus && matchesSite && matchesSearch ? '' : 'none';
+    });
+}
+
+function sortOrders() {
+    const sortValue = document.getElementById('sort-orders').value;
+    const grid = document.getElementById('orders-grid');
+    if (!grid) return;
+
+    const cards = Array.from(grid.querySelectorAll('.order-card'));
+
+    cards.sort((a, b) => {
+        switch (sortValue) {
+            case 'created_desc':
+                return parseInt(b.dataset.created || 0) - parseInt(a.dataset.created || 0);
+            case 'created_asc':
+                return parseInt(a.dataset.created || 0) - parseInt(b.dataset.created || 0);
+            case 'priority_desc':
+                return (parseInt(b.dataset.priority) || 0) - (parseInt(a.dataset.priority) || 0);
+            default:
+                return 0;
+        }
+    });
+
+    cards.forEach(card => grid.appendChild(card));
+}
+
+// Status filter buttons
+document.querySelectorAll('.stats-filter').forEach(btn => {
+    btn.addEventListener('click', () => {
+        currentStatusFilter = btn.dataset.filter;
+
+        document.querySelectorAll('.stats-filter').forEach(b => {
+            if (b === btn) {
+                b.classList.remove('border', 'border-gray-200', 'dark:border-border-dark');
+                b.classList.add('border-2', 'border-primary-600');
+            } else {
+                b.classList.remove('border-2', 'border-primary-600');
+                b.classList.add('border', 'border-gray-200', 'dark:border-border-dark');
+            }
+        });
+
+        filterOrders();
+    });
+});
+
+// Search input
+document.getElementById('search-orders')?.addEventListener('input', (e) => {
+    currentSearch = e.target.value.trim();
+    filterOrders();
+});
+
+// Site filter
+document.getElementById('filter-site')?.addEventListener('change', (e) => {
+    currentSiteFilter = e.target.value;
+    filterOrders();
+});
+
+// Sort
+document.getElementById('sort-orders')?.addEventListener('change', sortOrders);
+
+// Cancel order
+function cancelOrder(id, reference) {
+    document.getElementById('cancel-order-id').value = id;
+    document.getElementById('cancel-order-ref').textContent = reference;
+    document.getElementById('cancel-reason').value = '';
+    document.getElementById('cancel-modal').classList.remove('hidden');
+}
+
+function closeCancelModal() {
+    document.getElementById('cancel-modal').classList.add('hidden');
+}
+
+function confirmCancel() {
+    const id = document.getElementById('cancel-order-id').value;
+    const reason = document.getElementById('cancel-reason').value;
+
+    fetch('/api/v1/orders/' + id + '/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason })
+    })
+    .then(response => {
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            alert('Failed to cancel order');
+        }
+    });
+}
+</script>
+{{end}}

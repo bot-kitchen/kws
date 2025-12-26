@@ -1,17 +1,15 @@
 {{define "sidebar"}}
-<aside class="fixed inset-y-0 left-0 z-50 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-300"
-       :class="sidebarOpen ? 'w-64' : 'w-16'">
-
+<div class="flex flex-col h-full">
     <!-- Logo -->
-    <div class="flex items-center h-16 px-4 border-b border-gray-200 dark:border-gray-700">
+    <div class="flex items-center h-16 px-4 border-b border-gray-200 dark:border-border-dark">
         <a href="/" class="flex items-center space-x-3">
-            <span class="material-icons-outlined text-primary-600 text-3xl">kitchen</span>
-            <span class="font-bold text-xl text-gray-900 dark:text-white" x-show="sidebarOpen">KWS</span>
+            <span class="material-symbols-outlined text-primary text-3xl">kitchen</span>
+            <span class="font-bold text-xl text-gray-900 dark:text-white" x-show="sidebarOpen" x-transition>KWS</span>
         </a>
     </div>
 
     <!-- Navigation -->
-    <nav class="mt-6 px-3">
+    <nav class="flex-1 mt-6 px-3 overflow-y-auto">
         <div class="space-y-1">
             {{template "nav-item" dict "href" "/" "icon" "dashboard" "label" "Dashboard" "active" (eq .CurrentPage "dashboard")}}
             {{template "nav-item" dict "href" "/tenants" "icon" "business" "label" "Tenants" "active" (eq .CurrentPage "tenants")}}
@@ -20,18 +18,18 @@
         </div>
 
         <div class="mt-8">
-            <h3 class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider" x-show="sidebarOpen">
+            <h3 class="px-3 text-xs font-semibold text-text-secondary uppercase tracking-wider" x-show="sidebarOpen">
                 Operations
             </h3>
             <div class="mt-3 space-y-1">
                 {{template "nav-item" dict "href" "/recipes" "icon" "menu_book" "label" "Recipes" "active" (eq .CurrentPage "recipes")}}
-                {{template "nav-item" dict "href" "/ingredients" "icon" "grocery" "label" "Ingredients" "active" (eq .CurrentPage "ingredients")}}
+                {{template "nav-item" dict "href" "/ingredients" "icon" "inventory_2" "label" "Ingredients" "active" (eq .CurrentPage "ingredients")}}
                 {{template "nav-item" dict "href" "/orders" "icon" "receipt_long" "label" "Orders" "active" (eq .CurrentPage "orders")}}
             </div>
         </div>
 
         <div class="mt-8">
-            <h3 class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider" x-show="sidebarOpen">
+            <h3 class="px-3 text-xs font-semibold text-text-secondary uppercase tracking-wider" x-show="sidebarOpen">
                 Settings
             </h3>
             <div class="mt-3 space-y-1">
@@ -42,21 +40,23 @@
     </nav>
 
     <!-- Collapse toggle -->
-    <div class="absolute bottom-4 left-0 right-0 px-3">
+    <div class="p-3 border-t border-gray-200 dark:border-border-dark">
         <button @click="sidebarOpen = !sidebarOpen"
-                class="w-full flex items-center justify-center p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700">
-            <span class="material-icons-outlined" x-text="sidebarOpen ? 'chevron_left' : 'chevron_right'"></span>
+                class="w-full flex items-center justify-center p-2 rounded-lg text-text-secondary hover:bg-gray-100 dark:hover:bg-surface-highlight transition-colors">
+            <span class="material-symbols-outlined" x-text="sidebarOpen ? 'chevron_left' : 'chevron_right'"></span>
         </button>
     </div>
-</aside>
+</div>
 {{end}}
 
 {{define "nav-item"}}
 <a href="{{.href}}"
-   class="flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors
-          {{if .active}}bg-primary-50 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300
-          {{else}}text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700{{end}}">
-    <span class="material-icons-outlined text-xl">{{.icon}}</span>
-    <span class="ml-3" x-show="sidebarOpen">{{.label}}</span>
+   class="flex items-center py-2.5 rounded-lg text-sm font-medium transition-colors
+          {{if .active}}bg-primary/10 text-primary dark:bg-primary/20 dark:text-white
+          {{else}}text-gray-600 hover:bg-gray-100 dark:text-text-secondary dark:hover:bg-surface-highlight dark:hover:text-white{{end}}"
+   :class="sidebarOpen ? 'px-3' : 'justify-center px-2'"
+   title="{{.label}}">
+    <span class="material-symbols-outlined text-xl shrink-0 {{if .active}}text-primary{{end}}">{{.icon}}</span>
+    <span class="ml-3" x-show="sidebarOpen" x-transition>{{.label}}</span>
 </a>
 {{end}}

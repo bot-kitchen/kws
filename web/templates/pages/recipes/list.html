@@ -1,0 +1,269 @@
+{{define "title"}}Recipes - KWS{{end}}
+{{define "page-title"}}Recipes{{end}}
+
+{{define "content"}}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <p class="text-gray-500 dark:text-gray-400">Manage automated cooking recipes and procedures</p>
+        </div>
+        <a href="/recipes/new"
+           class="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors shadow-lg shadow-primary-600/20">
+            <span class="material-symbols-outlined mr-2">add</span>
+            Create Recipe
+        </a>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4">
+            <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-1">
+                <span class="material-symbols-outlined text-lg">menu_book</span>
+                <span class="text-sm font-medium">Total Recipes</span>
+            </div>
+            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{len .Recipes}}</p>
+        </div>
+        <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4">
+            <div class="flex items-center gap-2 text-green-600 dark:text-green-400 mb-1">
+                <span class="material-symbols-outlined text-lg">check_circle</span>
+                <span class="text-sm font-medium">Published</span>
+            </div>
+            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{.PublishedCount}}</p>
+        </div>
+        <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4">
+            <div class="flex items-center gap-2 text-yellow-600 dark:text-yellow-400 mb-1">
+                <span class="material-symbols-outlined text-lg">edit_note</span>
+                <span class="text-sm font-medium">Drafts</span>
+            </div>
+            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{.DraftCount}}</p>
+        </div>
+    </div>
+
+    <!-- Search and Filters -->
+    <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4">
+        <div class="flex flex-wrap gap-3 items-center">
+            <!-- Status Filter -->
+            <div class="flex rounded-lg border border-gray-300 dark:border-border-dark overflow-hidden">
+                <button type="button" data-filter="" class="filter-btn px-3 py-1.5 text-sm font-medium bg-primary text-white transition-colors">
+                    All
+                </button>
+                <button type="button" data-filter="published" class="filter-btn px-3 py-1.5 text-sm font-medium bg-white dark:bg-surface-highlight text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-border-dark transition-colors border-l border-gray-300 dark:border-border-dark">
+                    Published
+                </button>
+                <button type="button" data-filter="draft" class="filter-btn px-3 py-1.5 text-sm font-medium bg-white dark:bg-surface-highlight text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-border-dark transition-colors border-l border-gray-300 dark:border-border-dark">
+                    Drafts
+                </button>
+            </div>
+            <div class="flex-1"></div>
+            <div class="relative">
+                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">search</span>
+                <input type="text" id="search-recipes" placeholder="Search recipes..."
+                       class="pl-10 pr-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-border-dark bg-gray-50 dark:bg-surface-highlight text-gray-900 dark:text-white w-64 focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+        </div>
+    </div>
+
+    <!-- Recipes Grid -->
+    {{if .Recipes}}
+    <div id="recipes-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+        {{range .Recipes}}
+        <div class="recipe-card group bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-3 hover:border-primary-500/50 hover:shadow-lg transition-all duration-200"
+             data-name="{{.Name}}" data-status="{{.Status}}">
+            <!-- Header -->
+            <div class="flex items-center gap-2 mb-2">
+                <span class="material-symbols-outlined text-lg text-primary">menu_book</span>
+                <span class="text-xs px-1.5 py-0.5 rounded font-medium
+                    {{if eq .Status "published"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
+                    {{else if eq .Status "draft"}}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400
+                    {{else}}bg-gray-100 dark:bg-surface-highlight text-gray-600 dark:text-gray-300{{end}}">
+                    {{.Status}}
+                </span>
+            </div>
+
+            <!-- Name -->
+            <h3 class="text-sm font-bold text-gray-900 dark:text-white truncate mb-1" title="{{.Name}}">{{.Name}}</h3>
+
+            <!-- Category -->
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">{{.Category}}</p>
+
+            <!-- Times -->
+            <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mb-2">
+                <div class="flex items-center gap-0.5">
+                    <span class="material-symbols-outlined text-xs">schedule</span>
+                    <span>{{.PrepTime}}m prep</span>
+                </div>
+                <div class="flex items-center gap-0.5">
+                    <span class="material-symbols-outlined text-xs">local_fire_department</span>
+                    <span>{{.CookTime}}m cook</span>
+                </div>
+            </div>
+
+            <!-- Version -->
+            <div class="text-xs text-gray-400 mb-2">
+                Version {{.Version}}
+            </div>
+
+            <!-- Actions -->
+            <div class="flex flex-col gap-1.5 pt-2 border-t border-gray-100 dark:border-border-dark">
+                {{if eq .Status "draft"}}
+                <button onclick="publishRecipe('{{.ID}}')"
+                   class="w-full flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-bold transition-all">
+                    <span class="material-symbols-outlined text-sm">publish</span>
+                    <span>Publish</span>
+                </button>
+                {{else}}
+                <button onclick="unpublishRecipe('{{.ID}}')"
+                   class="w-full flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-gray-200 dark:bg-surface-highlight hover:bg-gray-300 dark:hover:bg-border-dark text-gray-700 dark:text-gray-300 text-xs font-medium transition-all">
+                    <span class="material-symbols-outlined text-sm">unpublished</span>
+                    <span>Unpublish</span>
+                </button>
+                {{end}}
+                <div class="flex gap-1">
+                    <a href="/recipes/{{.ID}}" class="flex-1 p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-white transition-colors flex items-center justify-center" title="View">
+                        <span class="material-symbols-outlined text-sm">visibility</span>
+                    </a>
+                    <a href="/recipes/{{.ID}}/edit" class="flex-1 p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-white transition-colors flex items-center justify-center" title="Edit">
+                        <span class="material-symbols-outlined text-sm">edit</span>
+                    </a>
+                    <button onclick="deleteRecipe('{{.ID}}', '{{.Name}}')" class="flex-1 p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 transition-colors flex items-center justify-center" title="Delete">
+                        <span class="material-symbols-outlined text-sm">delete</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        {{end}}
+    </div>
+    {{else}}
+    <div class="flex flex-col items-center justify-center py-16 bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl">
+        <div class="bg-gray-100 dark:bg-surface-highlight p-4 rounded-full mb-4">
+            <span class="material-symbols-outlined text-4xl text-gray-400">menu_book</span>
+        </div>
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">No recipes found</h3>
+        <p class="text-gray-500 dark:text-gray-400 mb-6">Get started by creating your first recipe</p>
+        <a href="/recipes/new"
+           class="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover">
+            <span class="material-symbols-outlined mr-2">add</span>
+            Create Your First Recipe
+        </a>
+    </div>
+    {{end}}
+</div>
+
+<!-- Delete Modal -->
+<div id="delete-modal" class="fixed inset-0 z-50 hidden">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black/50" onclick="closeDeleteModal()"></div>
+        <div class="relative bg-white dark:bg-surface-dark rounded-xl shadow-xl w-full max-w-md p-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                    <span class="material-symbols-outlined text-red-600 dark:text-red-400">delete</span>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Delete Recipe</h3>
+            </div>
+            <p class="text-gray-600 dark:text-gray-400 mb-4">
+                Are you sure you want to delete <span id="delete-recipe-name" class="font-semibold text-gray-900 dark:text-white"></span>? This action cannot be undone.
+            </p>
+            <input type="hidden" id="delete-recipe-id">
+            <div class="flex gap-3">
+                <button type="button" onclick="closeDeleteModal()"
+                        class="flex-1 py-2 px-4 rounded-lg bg-gray-100 dark:bg-surface-highlight hover:bg-gray-200 dark:hover:bg-border-dark text-gray-700 dark:text-white text-sm font-medium transition-colors">
+                    Cancel
+                </button>
+                <button type="button" onclick="confirmDelete()"
+                        class="flex-1 py-2 px-4 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition-colors">
+                    Delete
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+let currentStatusFilter = '';
+
+function filterRecipes() {
+    const searchTerm = document.getElementById('search-recipes').value.toLowerCase();
+
+    document.querySelectorAll('.recipe-card').forEach(card => {
+        const name = (card.dataset.name || '').toLowerCase();
+        const status = (card.dataset.status || '').toLowerCase();
+
+        const matchesStatus = !currentStatusFilter || status === currentStatusFilter;
+        const matchesSearch = !searchTerm || name.includes(searchTerm);
+
+        card.style.display = matchesStatus && matchesSearch ? '' : 'none';
+    });
+}
+
+document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        currentStatusFilter = btn.dataset.filter;
+
+        document.querySelectorAll('.filter-btn').forEach(b => {
+            if (b === btn) {
+                b.classList.remove('bg-white', 'dark:bg-surface-highlight', 'text-gray-600', 'dark:text-gray-300');
+                b.classList.add('bg-primary', 'text-white');
+            } else {
+                b.classList.remove('bg-primary', 'text-white');
+                b.classList.add('bg-white', 'dark:bg-surface-highlight', 'text-gray-600', 'dark:text-gray-300');
+            }
+        });
+
+        filterRecipes();
+    });
+});
+
+function publishRecipe(id) {
+    if (confirm('Publish this recipe? It will be synced to all KOS instances.')) {
+        fetch('/api/v1/recipes/' + id + '/publish', { method: 'POST' })
+            .then(response => {
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Failed to publish recipe');
+                }
+            });
+    }
+}
+
+function unpublishRecipe(id) {
+    if (confirm('Unpublish this recipe? It will no longer be available on KOS instances.')) {
+        fetch('/api/v1/recipes/' + id + '/unpublish', { method: 'POST' })
+            .then(response => {
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Failed to unpublish recipe');
+                }
+            });
+    }
+}
+
+function deleteRecipe(id, name) {
+    document.getElementById('delete-recipe-id').value = id;
+    document.getElementById('delete-recipe-name').textContent = name;
+    document.getElementById('delete-modal').classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    document.getElementById('delete-modal').classList.add('hidden');
+}
+
+function confirmDelete() {
+    const id = document.getElementById('delete-recipe-id').value;
+    fetch('/api/v1/recipes/' + id, { method: 'DELETE' })
+        .then(response => {
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                alert('Failed to delete recipe');
+            }
+        });
+}
+
+document.getElementById('search-recipes')?.addEventListener('input', filterRecipes);
+</script>
+{{end}}

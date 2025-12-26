@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" x-data="theme" :class="darkMode ? 'dark' : ''">
+<html lang="en" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -26,35 +26,15 @@
     <link rel="stylesheet" href="/static/css/styles.css">
 
     <!-- JS -->
-    <script src="/static/js/htmx.min.js"></script>
-    <script src="/static/js/theme.js"></script>
     <script src="/static/js/alpine.min.js" defer></script>
-    <script src="/static/js/app.js"></script>
 
     {{block "head" .}}{{end}}
 </head>
-<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display antialiased overflow-hidden h-screen flex">
-    <!-- Sidebar -->
-    <aside class="hidden md:flex flex-col h-full border-r border-gray-200 dark:border-border-dark bg-white dark:bg-background-dark shrink-0 transition-all duration-300"
-           :class="sidebarOpen ? 'w-64' : 'w-16'">
-        {{template "sidebar" .}}
-    </aside>
+<body class="h-full bg-background-light dark:bg-background-dark font-display"
+      x-data="{ darkMode: localStorage.getItem('theme') === 'dark' }"
+      x-init="if(darkMode) document.documentElement.classList.add('dark')">
 
-    <!-- Main content -->
-    <div class="flex-1 h-full overflow-hidden flex flex-col">
-        <!-- Header -->
-        {{template "header" .}}
-
-        <!-- Page content -->
-        <main class="flex-1 overflow-y-auto p-6 md:p-8">
-            <div class="max-w-7xl mx-auto">
-                {{block "content" .}}{{end}}
-            </div>
-        </main>
-    </div>
-
-    <!-- Toast container -->
-    <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+    {{block "content" .}}{{end}}
 
     {{block "scripts" .}}{{end}}
 </body>

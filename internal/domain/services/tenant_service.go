@@ -15,6 +15,7 @@ type TenantService interface {
 	GetByID(ctx context.Context, id primitive.ObjectID) (*models.Tenant, error)
 	GetByCode(ctx context.Context, code string) (*models.Tenant, error)
 	Update(ctx context.Context, id primitive.ObjectID, req UpdateTenantRequest) (*models.Tenant, error)
+	Delete(ctx context.Context, id primitive.ObjectID) error
 	List(ctx context.Context, filter repositories.TenantFilter) ([]*models.Tenant, int64, error)
 	Suspend(ctx context.Context, id primitive.ObjectID) error
 	Activate(ctx context.Context, id primitive.ObjectID) error
@@ -134,6 +135,27 @@ func (s *tenantService) Update(ctx context.Context, id primitive.ObjectID, req U
 
 func (s *tenantService) List(ctx context.Context, filter repositories.TenantFilter) ([]*models.Tenant, int64, error) {
 	return s.tenantRepo.List(ctx, filter)
+}
+
+func (s *tenantService) Delete(ctx context.Context, id primitive.ObjectID) error {
+	tenant, err := s.tenantRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if tenant == nil {
+		return fmt.Errorf("tenant not found")
+	}
+
+	// Delete Keycloak realm first
+	if s.keycloakSvc != nil && tenant.KeycloakRealmName != "" {
+		if err := s.keycloakSvc.DeleteRealm(ctx, tenant.KeycloakRealmName); err != nil {
+			// Log but don't fail - realm might already be deleted
+			// TODO: Add proper logging
+		}
+	}
+
+	// Delete tenant from MongoDB
+	return s.tenantRepo.Delete(ctx, id)
 }
 
 func (s *tenantService) Suspend(ctx context.Context, id primitive.ObjectID) error {

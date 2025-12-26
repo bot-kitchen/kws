@@ -50,3 +50,13 @@ data/
 
 # Docker volumes
 volumes/
+
+
+# Bun dependencies
+node_modules/
+bun.lock
+bun.lockb
+
+# Tailwind CSS build output
+web/static/css/styles.css
+web/static/css/styles.css.map

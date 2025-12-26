@@ -3,65 +3,126 @@
 
 {{define "content"}}
 <div class="space-y-6">
+    <!-- Getting Started (shown when no tenants exist) -->
+    {{if eq .TenantCount 0}}
+    <div class="bg-gradient-primary rounded-xl shadow-lg p-8 text-white">
+        <div class="flex items-start justify-between">
+            <div class="flex-1">
+                <h2 class="text-2xl font-bold mb-2">Welcome to KWS</h2>
+                <p class="text-primary-100 mb-6 max-w-2xl">
+                    Kitchen Web Service manages multiple KOS instances across tenants, regions, and sites.
+                    Get started by creating your first tenant.
+                </p>
+                <div class="flex flex-wrap gap-4">
+                    <a href="/tenants" class="inline-flex items-center px-5 py-2.5 bg-white text-primary-700 rounded-lg font-semibold hover:bg-primary-50 transition-colors shadow-md">
+                        <span class="material-symbols-outlined mr-2">add</span>
+                        Create First Tenant
+                    </a>
+                    <a href="https://github.com/ak/kws#readme" target="_blank" class="inline-flex items-center px-5 py-2.5 bg-primary-500/30 text-white rounded-lg font-medium hover:bg-primary-500/50 transition-colors">
+                        <span class="material-symbols-outlined mr-2">menu_book</span>
+                        Read Documentation
+                    </a>
+                </div>
+            </div>
+            <div class="hidden lg:block">
+                <span class="material-symbols-outlined text-8xl text-primary-300/50">rocket_launch</span>
+            </div>
+        </div>
+        <div class="mt-8 pt-6 border-t border-primary-500/30">
+            <h3 class="text-sm font-semibold text-primary-200 uppercase tracking-wider mb-4">Setup Steps</h3>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="flex items-center gap-3 p-3 bg-primary-500/20 rounded-lg">
+                    <div class="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center text-sm font-bold">1</div>
+                    <div>
+                        <p class="font-medium">Create Tenant</p>
+                        <p class="text-xs text-primary-200">Add your first customer</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 p-3 bg-primary-500/20 rounded-lg opacity-60">
+                    <div class="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center text-sm font-bold">2</div>
+                    <div>
+                        <p class="font-medium">Add Sites</p>
+                        <p class="text-xs text-primary-200">Define kitchen locations</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 p-3 bg-primary-500/20 rounded-lg opacity-60">
+                    <div class="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center text-sm font-bold">3</div>
+                    <div>
+                        <p class="font-medium">Register KOS</p>
+                        <p class="text-xs text-primary-200">Connect kitchen systems</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 p-3 bg-primary-500/20 rounded-lg opacity-60">
+                    <div class="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center text-sm font-bold">4</div>
+                    <div>
+                        <p class="font-medium">Create Recipes</p>
+                        <p class="text-xs text-primary-200">Start cooking!</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {{end}}
+
     <!-- Stats Grid -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <!-- Tenants -->
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-6">
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Tenants</p>
                     <p class="text-3xl font-bold text-gray-900 dark:text-white mt-1">{{.Stats.TenantCount}}</p>
                 </div>
                 <div class="p-3 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
-                    <span class="material-icons-outlined text-blue-600 dark:text-blue-400 text-2xl">business</span>
+                    <span class="material-symbols-outlined text-blue-600 dark:text-blue-400 text-2xl">business</span>
                 </div>
             </div>
             <div class="mt-4 flex items-center text-sm">
                 <span class="text-green-600 dark:text-green-400 flex items-center">
-                    <span class="material-icons-outlined text-sm mr-1">trending_up</span>
+                    <span class="material-symbols-outlined text-sm mr-1">trending_up</span>
                     {{.Stats.ActiveTenants}} active
                 </span>
             </div>
         </div>
 
         <!-- Sites -->
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-6">
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Sites</p>
                     <p class="text-3xl font-bold text-gray-900 dark:text-white mt-1">{{.Stats.SiteCount}}</p>
                 </div>
                 <div class="p-3 bg-purple-100 dark:bg-purple-900/50 rounded-lg">
-                    <span class="material-icons-outlined text-purple-600 dark:text-purple-400 text-2xl">location_on</span>
+                    <span class="material-symbols-outlined text-purple-600 dark:text-purple-400 text-2xl">location_on</span>
                 </div>
             </div>
             <div class="mt-4 flex items-center text-sm">
                 <span class="text-green-600 dark:text-green-400 flex items-center">
-                    <span class="material-icons-outlined text-sm mr-1">check_circle</span>
+                    <span class="material-symbols-outlined text-sm mr-1">check_circle</span>
                     {{.Stats.ActiveSites}} operational
                 </span>
             </div>
         </div>
 
         <!-- KOS Instances -->
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-6">
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-sm font-medium text-gray-500 dark:text-gray-400">KOS Instances</p>
                     <p class="text-3xl font-bold text-gray-900 dark:text-white mt-1">{{.Stats.KOSCount}}</p>
                 </div>
                 <div class="p-3 bg-green-100 dark:bg-green-900/50 rounded-lg">
-                    <span class="material-icons-outlined text-green-600 dark:text-green-400 text-2xl">devices</span>
+                    <span class="material-symbols-outlined text-green-600 dark:text-green-400 text-2xl">devices</span>
                 </div>
             </div>
             <div class="mt-4 flex items-center text-sm">
                 <span class="text-green-600 dark:text-green-400 flex items-center">
-                    <span class="material-icons-outlined text-sm mr-1">cloud_done</span>
+                    <span class="material-symbols-outlined text-sm mr-1">cloud_done</span>
                     {{.Stats.OnlineKOS}} online
                 </span>
                 {{if gt .Stats.OfflineKOS 0}}
                 <span class="text-red-600 dark:text-red-400 flex items-center ml-3">
-                    <span class="material-icons-outlined text-sm mr-1">cloud_off</span>
+                    <span class="material-symbols-outlined text-sm mr-1">cloud_off</span>
                     {{.Stats.OfflineKOS}} offline
                 </span>
                 {{end}}
@@ -69,24 +130,24 @@
         </div>
 
         <!-- Orders Today -->
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-6">
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Orders Today</p>
                     <p class="text-3xl font-bold text-gray-900 dark:text-white mt-1">{{.Stats.OrdersToday}}</p>
                 </div>
                 <div class="p-3 bg-orange-100 dark:bg-orange-900/50 rounded-lg">
-                    <span class="material-icons-outlined text-orange-600 dark:text-orange-400 text-2xl">receipt_long</span>
+                    <span class="material-symbols-outlined text-orange-600 dark:text-orange-400 text-2xl">receipt_long</span>
                 </div>
             </div>
             <div class="mt-4 flex items-center text-sm">
                 <span class="text-green-600 dark:text-green-400 flex items-center">
-                    <span class="material-icons-outlined text-sm mr-1">check</span>
+                    <span class="material-symbols-outlined text-sm mr-1">check</span>
                     {{.Stats.CompletedToday}} completed
                 </span>
                 {{if gt .Stats.PendingOrders 0}}
                 <span class="text-yellow-600 dark:text-yellow-400 flex items-center ml-3">
-                    <span class="material-icons-outlined text-sm mr-1">pending</span>
+                    <span class="material-symbols-outlined text-sm mr-1">pending</span>
                     {{.Stats.PendingOrders}} pending
                 </span>
                 {{end}}
@@ -97,10 +158,10 @@
     <!-- Recent Activity and Alerts -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- KOS Status -->
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+        <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-border-dark flex items-center justify-between">
                 <h2 class="text-lg font-semibold text-gray-900 dark:text-white">KOS Instance Status</h2>
-                <a href="/kos" class="text-sm text-primary-600 hover:text-primary-700">View All</a>
+                <a href="/kos" class="text-sm text-primary hover:text-primary-hover">View All</a>
             </div>
             <div class="p-6">
                 <div class="space-y-4">
@@ -133,15 +194,15 @@
         </div>
 
         <!-- Recent Orders -->
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+        <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-border-dark flex items-center justify-between">
                 <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Recent Orders</h2>
-                <a href="/orders" class="text-sm text-primary-600 hover:text-primary-700">View All</a>
+                <a href="/orders" class="text-sm text-primary hover:text-primary-hover">View All</a>
             </div>
             <div class="p-6">
                 <div class="space-y-4">
                     {{range .RecentOrders}}
-                    <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                    <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-surface-highlight rounded-lg">
                         <div>
                             <p class="font-medium text-gray-900 dark:text-white">{{.OrderReference}}</p>
                             <p class="text-sm text-gray-500">{{.SiteName}} - {{.ItemCount}} items</p>
@@ -168,8 +229,8 @@
 
     <!-- Alerts -->
     {{if .Alerts}}
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+    <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-border-dark">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Active Alerts</h2>
         </div>
         <div class="p-6">
@@ -179,7 +240,7 @@
                     {{if eq .Severity "critical"}}bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800
                     {{else if eq .Severity "warning"}}bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800
                     {{else}}bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800{{end}}">
-                    <span class="material-icons-outlined mr-3
+                    <span class="material-symbols-outlined mr-3
                         {{if eq .Severity "critical"}}text-red-600
                         {{else if eq .Severity "warning"}}text-yellow-600
                         {{else}}text-blue-600{{end}}">

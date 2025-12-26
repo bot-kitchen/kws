@@ -1,9 +1,12 @@
 package app
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/ak/kws/internal/app/middleware"
+	"github.com/ak/kws/internal/domain/services"
 	"github.com/ak/kws/internal/infrastructure/config"
 	"github.com/ak/kws/internal/infrastructure/database"
 	"github.com/ak/kws/internal/infrastructure/repositories"
@@ -14,31 +17,62 @@ import (
 
 // Application holds all application dependencies and services
 type Application struct {
-	config      *config.Config
-	logger      *logger.Logger
-	mongodb     *database.MongoDB
-	repos       *repositories.Provider
-	router      *gin.Engine
-	handlers    *Handlers
-	webHandlers *WebHandlers
+	config        *config.Config
+	logger        *logger.Logger
+	mongodb       *database.MongoDB
+	repos         *repositories.Provider
+	tenantService services.TenantService
+	router        *gin.Engine
+	handlers      *Handlers
+	webHandlers   *WebHandlers
 }
 
 // New creates a new Application instance
 func New(cfg *config.Config, log *logger.Logger, mongodb *database.MongoDB) (*Application, error) {
 	repos := repositories.NewProvider(mongodb)
 
+	// Initialize Keycloak service (optional - may not be available in dev)
+	var keycloakSvc services.KeycloakService
+	if cfg.Keycloak.URL != "" {
+		var err error
+		keycloakSvc, err = services.NewKeycloakService(cfg.Keycloak)
+		if err != nil {
+			log.Warn("Keycloak service unavailable, tenant realm management disabled",
+				zap.Error(err))
+		}
+	}
+
+	// Create tenant service with Keycloak integration
+	tenantService := services.NewTenantService(repos.Tenant, keycloakSvc)
+
 	app := &Application{
-		config:  cfg,
-		logger:  log,
-		mongodb: mongodb,
-		repos:   repos,
+		config:        cfg,
+		logger:        log,
+		mongodb:       mongodb,
+		repos:         repos,
+		tenantService: tenantService,
 	}
 
 	// Create handlers with repositories
 	app.handlers = NewHandlers(repos, log)
 
+	// Configure session for web UI authentication
+	sessionConfig := middleware.SessionConfig{
+		KeycloakURL:    cfg.Keycloak.URL,
+		Realm:          "kws-platform", // Platform realm for web UI
+		ClientID:       "kws-web",
+		ClientSecret:   "", // Public client, no secret needed
+		RedirectURL:    fmt.Sprintf("%s/auth/callback", cfg.Server.ExternalURL),
+		CookieName:     "kws_session",
+		CookieDomain:   "",
+		CookieSecure:   cfg.IsProduction(),
+		CookieHTTPOnly: true,
+		SessionTTL:     24 * time.Hour,
+		DevMode:        cfg.IsDevelopment() && cfg.App.Debug,
+	}
+
 	// Create web handlers for UI
-	webHandlers, err := NewWebHandlers(app.handlers)
+	webHandlers, err := NewWebHandlers(app.handlers, sessionConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -90,6 +124,9 @@ func (a *Application) setupRoutes() {
 			tenants.POST("", a.createTenant)
 			tenants.GET("/:id", a.getTenant)
 			tenants.PUT("/:id", a.updateTenant)
+			tenants.DELETE("/:id", a.deleteTenant)
+			tenants.POST("/:id/suspend", a.suspendTenant)
+			tenants.POST("/:id/activate", a.activateTenant)
 		}
 
 		// Region management

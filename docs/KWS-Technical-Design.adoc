@@ -158,7 +158,7 @@ After evaluating the data model and code reuse requirements, we recommend using 
 |443
 
 |Keycloak
-|Keycloak 23.0+
+|Keycloak 26.0+
 |Authentication, authorization, user management
 |8180
 

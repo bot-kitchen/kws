@@ -29,7 +29,8 @@
       "Bash(go mod tidy:*)",
       "Bash(bash:*)",
       "Bash(tail:*)",
-      "Bash(supervisorctl:*)"
+      "Bash(supervisorctl:*)",
+      "Bash(bun install)"
     ],
     "deny": [],
     "ask": [],

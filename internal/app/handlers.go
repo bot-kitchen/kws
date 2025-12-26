@@ -7,6 +7,7 @@ import (
 
 	"github.com/ak/kws/internal/domain/models"
 	"github.com/ak/kws/internal/domain/repositories"
+	"github.com/ak/kws/internal/domain/services"
 	infrarepos "github.com/ak/kws/internal/infrastructure/repositories"
 	"github.com/ak/kws/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
@@ -153,11 +154,11 @@ func (a *Application) apiInfo(c *gin.Context) {
 // ==================== Tenant handlers ====================
 
 type CreateTenantRequest struct {
-	Code         string                 `json:"code" binding:"required"`
-	Name         string                 `json:"name" binding:"required"`
-	ContactEmail string                 `json:"contact_email" binding:"required,email"`
-	ContactPhone string                 `json:"contact_phone"`
-	Plan         string                 `json:"plan"`
+	Code         string                 `json:"code" form:"code" binding:"required"`
+	Name         string                 `json:"name" form:"name" binding:"required"`
+	ContactEmail string                 `json:"contact_email" form:"contact_email" binding:"required,email"`
+	ContactPhone string                 `json:"contact_phone" form:"contact_phone"`
+	Plan         string                 `json:"plan" form:"plan"`
 	Address      *models.Address        `json:"address"`
 	Settings     *models.TenantSettings `json:"settings"`
 }
@@ -181,40 +182,90 @@ func (a *Application) listTenants(c *gin.Context) {
 
 func (a *Application) createTenant(c *gin.Context) {
 	var req CreateTenantRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBind(&req); err != nil {
 		errorResponse(c, http.StatusBadRequest, "INVALID_INPUT", err.Error())
 		return
 	}
 
-	// Check if code already exists
-	existing, _ := a.repos.Tenant.GetByCode(c.Request.Context(), req.Code)
-	if existing != nil {
-		errorResponse(c, http.StatusConflict, "ALREADY_EXISTS", "Tenant with this code already exists")
-		return
+	// Use TenantService which handles both MongoDB and Keycloak realm creation
+	plan := req.Plan
+	if plan == "" {
+		plan = "starter"
 	}
 
-	tenant := &models.Tenant{
-		Code:              req.Code,
-		Name:              req.Name,
-		Status:            models.TenantStatusActive,
-		Plan:              req.Plan,
-		KeycloakRealmName: "tenant-" + req.Code,
-		ContactEmail:      req.ContactEmail,
-		ContactPhone:      req.ContactPhone,
-		Address:           req.Address,
-		Settings:          req.Settings,
-	}
-
-	if tenant.Plan == "" {
-		tenant.Plan = "starter"
-	}
-
-	if err := a.repos.Tenant.Create(c.Request.Context(), tenant); err != nil {
-		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to create tenant")
+	tenant, err := a.tenantService.Create(c.Request.Context(), services.CreateTenantRequest{
+		Code:         req.Code,
+		Name:         req.Name,
+		Plan:         plan,
+		ContactEmail: req.ContactEmail,
+		ContactPhone: req.ContactPhone,
+	})
+	if err != nil {
+		if err.Error() == "tenant with code '"+req.Code+"' already exists" {
+			errorResponse(c, http.StatusConflict, "ALREADY_EXISTS", err.Error())
+			return
+		}
+		errorResponse(c, http.StatusInternalServerError, "CREATE_ERROR", err.Error())
 		return
 	}
 
 	createdResponse(c, tenant)
+}
+
+func (a *Application) deleteTenant(c *gin.Context) {
+	id, ok := getObjectID(c, "id")
+	if !ok {
+		return
+	}
+
+	if err := a.tenantService.Delete(c.Request.Context(), id); err != nil {
+		if err.Error() == "tenant not found" {
+			errorResponse(c, http.StatusNotFound, "NOT_FOUND", "Tenant not found")
+			return
+		}
+		errorResponse(c, http.StatusInternalServerError, "DELETE_ERROR", err.Error())
+		return
+	}
+
+	c.JSON(http.StatusNoContent, nil)
+}
+
+func (a *Application) suspendTenant(c *gin.Context) {
+	id, ok := getObjectID(c, "id")
+	if !ok {
+		return
+	}
+
+	if err := a.tenantService.Suspend(c.Request.Context(), id); err != nil {
+		if err.Error() == "tenant not found" {
+			errorResponse(c, http.StatusNotFound, "NOT_FOUND", "Tenant not found")
+			return
+		}
+		errorResponse(c, http.StatusInternalServerError, "SUSPEND_ERROR", err.Error())
+		return
+	}
+
+	tenant, _ := a.tenantService.GetByID(c.Request.Context(), id)
+	successResponse(c, tenant)
+}
+
+func (a *Application) activateTenant(c *gin.Context) {
+	id, ok := getObjectID(c, "id")
+	if !ok {
+		return
+	}
+
+	if err := a.tenantService.Activate(c.Request.Context(), id); err != nil {
+		if err.Error() == "tenant not found" {
+			errorResponse(c, http.StatusNotFound, "NOT_FOUND", "Tenant not found")
+			return
+		}
+		errorResponse(c, http.StatusInternalServerError, "ACTIVATE_ERROR", err.Error())
+		return
+	}
+
+	tenant, _ := a.tenantService.GetByID(c.Request.Context(), id)
+	successResponse(c, tenant)
 }
 
 func (a *Application) getTenant(c *gin.Context) {
