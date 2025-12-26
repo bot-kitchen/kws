@@ -1593,12 +1593,13 @@ func (w *WebHandlers) OrderNew(c *gin.Context) {
 				})
 			}
 
-			// Get sites
+			// Get sites with region info for order routing
 			sites, _, _ := w.handlers.repos.Site.ListByTenant(ctx, tenantID, 1, 100)
 			for _, s := range sites {
 				siteData = append(siteData, gin.H{
-					"ID":   s.ID.Hex(),
-					"Name": s.Name,
+					"ID":       s.ID.Hex(),
+					"Name":     s.Name,
+					"RegionID": s.RegionID.Hex(),
 				})
 			}
 		}
@@ -1606,6 +1607,7 @@ func (w *WebHandlers) OrderNew(c *gin.Context) {
 
 	data := gin.H{
 		"CurrentPage": "orders",
+		"TenantID":    tenantIDStr,
 		"Recipes":     recipeData,
 		"Sites":       siteData,
 	}
@@ -1632,17 +1634,18 @@ func (w *WebHandlers) OrderDetail(c *gin.Context) {
 	data := gin.H{
 		"CurrentPage": "orders",
 		"Order": gin.H{
-			"ID":            order.ID.Hex(),
-			"OrderID":       order.OrderReference,
-			"RecipeID":      order.RecipeID.Hex(),
-			"RecipeName":    order.RecipeName,
-			"SiteID":        order.SiteID.Hex(),
-			"CustomerName":  order.CustomerName,
-			"Status":        order.Status,
-			"Priority":      order.Priority,
-			"PotPercentage": order.PotPercentage,
-			"CreatedAt":     order.CreatedAt,
-			"UpdatedAt":     order.UpdatedAt,
+			"ID":                  order.ID.Hex(),
+			"OrderID":             order.OrderReference,
+			"RecipeID":            order.RecipeID.Hex(),
+			"RecipeName":          order.RecipeName,
+			"SiteID":              order.SiteID.Hex(),
+			"CustomerName":        order.CustomerName,
+			"Status":              order.Status,
+			"Priority":            order.Priority,
+			"PotPercentage":       order.PotPercentage,
+			"SpecialInstructions": order.SpecialInstructions,
+			"CreatedAt":           order.CreatedAt,
+			"UpdatedAt":           order.UpdatedAt,
 		},
 	}
 	w.renderTemplate(c, "orders-view", data)

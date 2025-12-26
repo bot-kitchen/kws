@@ -13,6 +13,20 @@
         <h1 class="text-xl font-bold text-gray-900 dark:text-white mb-6">Create New Order</h1>
 
         <form id="order-form" class="space-y-6">
+            <!-- Site Selection -->
+            <div>
+                <label for="site_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Site <span class="text-red-500">*</span>
+                </label>
+                <select id="site_id" name="site_id" required
+                        class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white">
+                    <option value="">Select a site...</option>
+                    {{range .Sites}}
+                    <option value="{{.ID}}" data-region="{{.RegionID}}">{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+
             <!-- Recipe Selection -->
             <div>
                 <label for="recipe_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -37,20 +51,6 @@
                        placeholder="Enter customer name (optional)">
             </div>
 
-            <!-- Site Selection -->
-            <div>
-                <label for="site_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Site <span class="text-red-500">*</span>
-                </label>
-                <select id="site_id" name="site_id" required
-                        class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white">
-                    <option value="">Select a site...</option>
-                    {{range .Sites}}
-                    <option value="{{.ID}}">{{.Name}}</option>
-                    {{end}}
-                </select>
-            </div>
-
             <!-- Priority -->
             <div>
                 <label for="priority" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -58,9 +58,9 @@
                 </label>
                 <select id="priority" name="priority"
                         class="w-full px-4 py-2.5 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-gray-900 dark:text-white">
-                    <option value="normal" selected>Normal</option>
-                    <option value="high">High</option>
-                    <option value="urgent">Urgent</option>
+                    <option value="5" selected>Normal</option>
+                    <option value="3">High</option>
+                    <option value="1">Urgent</option>
                 </select>
             </div>
 
@@ -75,13 +75,16 @@
                 <p class="mt-1 text-xs text-gray-500 dark:text-text-secondary">Percentage of pot capacity to use (1-100%)</p>
             </div>
 
+            <!-- Result message -->
+            <div id="result"></div>
+
             <!-- Form Actions -->
             <div class="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-border-dark">
                 <a href="/orders"
                    class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-surface-dark border border-gray-300 dark:border-border-dark rounded-lg hover:bg-gray-50 dark:hover:bg-surface-highlight transition-colors">
                     Cancel
                 </a>
-                <button type="submit"
+                <button type="submit" id="submit-btn"
                         class="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary-hover rounded-lg transition-colors flex items-center gap-2">
                     <span class="material-symbols-outlined text-sm">add</span>
                     Create Order
@@ -92,10 +95,13 @@
 </div>
 
 <script>
+const TENANT_ID = '{{.TenantID}}';
+
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('order-form');
+    const siteSelect = document.getElementById('site_id');
 
-    // Initialize Tom Select for recipe dropdown if available
+    // Initialize Tom Select for dropdowns if available
     if (typeof TomSelect !== 'undefined') {
         new TomSelect('#recipe_id', {
             placeholder: 'Search recipes...',
@@ -110,23 +116,40 @@ document.addEventListener('DOMContentLoaded', function() {
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
 
-        const formData = new FormData(form);
+        const resultDiv = document.getElementById('result');
+        const submitBtn = document.getElementById('submit-btn');
+
+        // Get site's region ID from data attribute
+        const selectedOption = siteSelect.options[siteSelect.selectedIndex];
+        const regionId = selectedOption?.dataset?.region || '';
+
+        if (!regionId) {
+            resultDiv.innerHTML = '<div class="p-3 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">' +
+                '<span class="material-symbols-outlined text-sm align-middle mr-1">error</span>Please select a site</div>';
+            return;
+        }
+
+        // Generate order reference
+        const orderRef = 'ORD-' + Date.now().toString(36).toUpperCase();
+
         const data = {
-            recipe_id: formData.get('recipe_id'),
-            customer_name: formData.get('customer_name') || undefined,
-            site_id: formData.get('site_id'),
-            priority: formData.get('priority'),
-            pot_percentage: parseInt(formData.get('pot_percentage')) || 100
+            tenant_id: TENANT_ID,
+            region_id: regionId,
+            site_id: siteSelect.value,
+            order_reference: orderRef,
+            customer_name: document.getElementById('customer_name').value || '',
+            priority: parseInt(document.getElementById('priority').value) || 5,
+            items: [{
+                recipe_id: document.getElementById('recipe_id').value,
+                quantity: 1,
+                pot_percentage: parseInt(document.getElementById('pot_percentage').value) || 100
+            }]
         };
 
-        // Remove undefined fields
-        Object.keys(data).forEach(key => {
-            if (data[key] === undefined) {
-                delete data[key];
-            }
-        });
-
         try {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">progress_activity</span><span>Creating...</span>';
+
             const response = await fetch('/api/v1/orders', {
                 method: 'POST',
                 headers: {
@@ -137,27 +160,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const result = await response.json();
 
-            if (response.ok && result.success) {
-                if (typeof showToast === 'function') {
-                    showToast('Order created successfully', 'success');
-                }
-                // Redirect to orders list
-                window.location.href = '/orders';
-            } else {
-                const errorMsg = result.error || 'Failed to create order';
-                if (typeof showToast === 'function') {
-                    showToast(errorMsg, 'error');
-                } else {
-                    alert(errorMsg);
-                }
+            if (!response.ok) {
+                throw new Error(result.error?.message || result.message || 'Failed to create order');
             }
+
+            resultDiv.innerHTML = '<div class="p-3 bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-800 rounded-lg text-green-700 dark:text-green-400 text-sm">' +
+                '<span class="material-symbols-outlined text-sm align-middle mr-1">check_circle</span>' +
+                'Order created successfully! Redirecting...</div>';
+
+            setTimeout(function() {
+                window.location.href = '/orders';
+            }, 1000);
+
         } catch (error) {
             console.error('Error creating order:', error);
-            if (typeof showToast === 'function') {
-                showToast('Failed to create order', 'error');
-            } else {
-                alert('Failed to create order');
-            }
+            resultDiv.innerHTML = '<div class="p-3 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">' +
+                '<span class="material-symbols-outlined text-sm align-middle mr-1">error</span>' + error.message + '</div>';
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<span class="material-symbols-outlined text-sm">add</span><span>Create Order</span>';
         }
     });
 });

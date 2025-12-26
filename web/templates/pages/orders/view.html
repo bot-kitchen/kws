@@ -1,115 +1,141 @@
 {{define "orders-view"}}
-<div class="max-w-6xl mx-auto">
-    <!-- Back Button -->
-    <div class="mb-6">
-        <a href="/orders" class="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-primary transition-colors">
-            <span class="material-symbols-outlined">arrow_back</span>
-            <span>Back to Orders</span>
-        </a>
-    </div>
-
-    <!-- Order Header Card - Compact -->
-    <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-4 mb-4">
-        <!-- Row 1: Order ID, Customer, Status -->
-        <div class="flex items-center justify-between gap-3 mb-3">
-            <div class="flex items-center gap-3 min-w-0">
-                <h1 class="text-lg font-bold text-gray-900 dark:text-white truncate">
-                    {{.Order.OrderID}}
-                </h1>
-                {{if .Order.CustomerName}}
-                <span class="text-sm text-gray-500 dark:text-gray-400">{{.Order.CustomerName}}</span>
-                {{end}}
+<div class="max-w-4xl mx-auto space-y-6">
+    <!-- Page Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+        <div>
+            <div class="flex items-center gap-3 mb-2">
+                <h1 class="text-3xl md:text-4xl font-bold tracking-tight">{{.Order.OrderID}}</h1>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                    {{if eq .Order.Status "completed"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
+                    {{else if eq .Order.Status "in_progress"}}bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400
+                    {{else if eq .Order.Status "failed"}}bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400
+                    {{else if eq .Order.Status "cancelled"}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400
+                    {{else}}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400{{end}}">
+                    {{if eq .Order.Status "in_progress"}}cooking{{else}}{{.Order.Status}}{{end}}
+                </span>
             </div>
-            <span class="px-2 py-1 text-xs font-semibold rounded-lg flex-shrink-0
-                {{if eq .Order.Status "completed"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
-                {{else if eq .Order.Status "in_progress"}}bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400
-                {{else if eq .Order.Status "failed"}}bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400
-                {{else if eq .Order.Status "cancelled"}}bg-gray-100 dark:bg-gray-900/30 text-gray-700 dark:text-gray-400
-                {{else}}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400{{end}}">
-                {{if eq .Order.Status "in_progress"}}cooking{{else}}{{.Order.Status}}{{end}}
-            </span>
+            <p class="text-gray-500 dark:text-text-secondary text-sm md:text-base flex items-center gap-2">
+                {{if .Order.CustomerName}}
+                <span class="material-symbols-outlined text-sm">person</span>
+                {{.Order.CustomerName}}
+                <span class="text-gray-300 dark:text-gray-600">|</span>
+                {{end}}
+                <span class="material-symbols-outlined text-sm">restaurant</span>
+                {{.Order.RecipeName}}
+            </p>
         </div>
-
-        <!-- Row 2: Details inline with pipe separators -->
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600 dark:text-gray-400">
-            {{if .Order.RecipeName}}
-            <span class="flex items-center gap-1">
-                <span class="material-symbols-outlined text-primary" style="font-size: 14px;">restaurant</span>
-                <span class="font-medium text-gray-900 dark:text-white">{{.Order.RecipeName}}</span>
-            </span>
+        <div class="flex items-center gap-2">
+            {{if eq .Order.Status "pending"}}
+            <button type="button" onclick="cancelOrder()"
+                    class="flex items-center gap-2 rounded-lg bg-red-600 hover:bg-red-700 text-white px-4 py-2 text-sm font-bold transition-all">
+                <span class="material-symbols-outlined text-lg">cancel</span>
+                <span>Cancel</span>
+            </button>
             {{end}}
-            {{if .Order.PotPercentage}}
-            {{if .Order.RecipeName}}<span class="text-gray-400 dark:text-gray-600">|</span>{{end}}
-            <span class="flex items-center gap-1">
-                <span class="material-symbols-outlined text-primary" style="font-size: 14px;">pie_chart</span>
-                <span class="font-medium text-gray-900 dark:text-white">{{.Order.PotPercentage}}%</span>
-            </span>
-            {{end}}
-            {{if .Order.Priority}}
-            {{if or .Order.RecipeName .Order.PotPercentage}}<span class="text-gray-400 dark:text-gray-600">|</span>{{end}}
-            <span class="flex items-center gap-1">
-                <span class="material-symbols-outlined text-primary" style="font-size: 14px;">flag</span>
-                <span class="font-medium text-gray-900 dark:text-white">{{.Order.Priority}}</span>
-            </span>
-            {{end}}
-            {{if .Order.SiteID}}
-            {{if or .Order.RecipeName .Order.PotPercentage .Order.Priority}}<span class="text-gray-400 dark:text-gray-600">|</span>{{end}}
-            <span class="flex items-center gap-1">
-                <span class="material-symbols-outlined text-primary" style="font-size: 14px;">location_on</span>
-                <span class="font-medium text-gray-900 dark:text-white">{{.Order.SiteID}}</span>
-            </span>
-            {{end}}
+            <a href="/orders"
+               class="flex items-center gap-2 rounded-lg bg-gray-100 dark:bg-surface-highlight hover:bg-gray-200 dark:hover:bg-border-dark text-gray-700 dark:text-white px-4 py-2 text-sm font-medium transition-colors">
+                <span class="material-symbols-outlined text-lg">arrow_back</span>
+                <span>Back</span>
+            </a>
         </div>
     </div>
 
     <!-- Order Details Card -->
     <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-6">
-        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Order Details</h2>
+        <h2 class="flex items-center gap-2 text-xl font-semibold mb-6 text-gray-900 dark:text-white">
+            <span class="material-symbols-outlined text-primary">receipt_long</span>
+            Order Details
+        </h2>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="space-y-3">
-                <div class="flex justify-between">
-                    <span class="text-gray-500 dark:text-text-secondary">Order ID</span>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-4">
+                <div class="flex justify-between items-center py-2 border-b border-gray-100 dark:border-border-dark">
+                    <span class="text-gray-500 dark:text-text-secondary">Order Reference</span>
                     <span class="font-medium text-gray-900 dark:text-white">{{.Order.OrderID}}</span>
                 </div>
                 {{if .Order.CustomerName}}
-                <div class="flex justify-between">
+                <div class="flex justify-between items-center py-2 border-b border-gray-100 dark:border-border-dark">
                     <span class="text-gray-500 dark:text-text-secondary">Customer</span>
                     <span class="font-medium text-gray-900 dark:text-white">{{.Order.CustomerName}}</span>
                 </div>
                 {{end}}
-                <div class="flex justify-between">
+                <div class="flex justify-between items-center py-2 border-b border-gray-100 dark:border-border-dark">
                     <span class="text-gray-500 dark:text-text-secondary">Recipe</span>
                     <span class="font-medium text-gray-900 dark:text-white">{{.Order.RecipeName}}</span>
                 </div>
-                <div class="flex justify-between">
+                <div class="flex justify-between items-center py-2 border-b border-gray-100 dark:border-border-dark">
                     <span class="text-gray-500 dark:text-text-secondary">Status</span>
-                    <span class="font-medium text-gray-900 dark:text-white">{{.Order.Status}}</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                        {{if eq .Order.Status "completed"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
+                        {{else if eq .Order.Status "in_progress"}}bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400
+                        {{else if eq .Order.Status "failed"}}bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400
+                        {{else if eq .Order.Status "cancelled"}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400
+                        {{else}}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400{{end}}">
+                        {{if eq .Order.Status "in_progress"}}cooking{{else}}{{.Order.Status}}{{end}}
+                    </span>
                 </div>
             </div>
-            <div class="space-y-3">
+            <div class="space-y-4">
                 {{if .Order.Priority}}
-                <div class="flex justify-between">
+                <div class="flex justify-between items-center py-2 border-b border-gray-100 dark:border-border-dark">
                     <span class="text-gray-500 dark:text-text-secondary">Priority</span>
-                    <span class="font-medium text-gray-900 dark:text-white">{{.Order.Priority}}</span>
+                    <span class="font-medium text-gray-900 dark:text-white">
+                        {{if eq .Order.Priority 1}}Urgent
+                        {{else if le .Order.Priority 3}}High
+                        {{else}}Normal{{end}}
+                    </span>
                 </div>
                 {{end}}
                 {{if .Order.PotPercentage}}
-                <div class="flex justify-between">
+                <div class="flex justify-between items-center py-2 border-b border-gray-100 dark:border-border-dark">
                     <span class="text-gray-500 dark:text-text-secondary">Pot Percentage</span>
                     <span class="font-medium text-gray-900 dark:text-white">{{.Order.PotPercentage}}%</span>
                 </div>
                 {{end}}
-                <div class="flex justify-between">
+                <div class="flex justify-between items-center py-2 border-b border-gray-100 dark:border-border-dark">
                     <span class="text-gray-500 dark:text-text-secondary">Created</span>
                     <span class="font-medium text-gray-900 dark:text-white">{{formatTime .Order.CreatedAt}}</span>
                 </div>
-                <div class="flex justify-between">
+                <div class="flex justify-between items-center py-2 border-b border-gray-100 dark:border-border-dark">
                     <span class="text-gray-500 dark:text-text-secondary">Updated</span>
                     <span class="font-medium text-gray-900 dark:text-white">{{formatTime .Order.UpdatedAt}}</span>
                 </div>
             </div>
         </div>
     </div>
+
+    {{if .Order.SpecialInstructions}}
+    <!-- Special Instructions Card -->
+    <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-6">
+        <h2 class="flex items-center gap-2 text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+            <span class="material-symbols-outlined text-primary">notes</span>
+            Special Instructions
+        </h2>
+        <p class="text-gray-700 dark:text-gray-300">{{.Order.SpecialInstructions}}</p>
+    </div>
+    {{end}}
 </div>
+
+<script>
+function cancelOrder() {
+    if (!confirm('Are you sure you want to cancel this order?')) return;
+
+    fetch('/api/v1/orders/{{.Order.ID}}/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => {
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            return response.json().then(data => {
+                throw new Error(data.error?.message || 'Failed to cancel order');
+            });
+        }
+    })
+    .catch(error => {
+        alert(error.message);
+    });
+}
+</script>
 {{end}}
