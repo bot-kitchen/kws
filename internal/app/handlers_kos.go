@@ -5,7 +5,9 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"net/http"
 	"time"
@@ -153,6 +155,93 @@ func (a *Application) updateKOSInstance(c *gin.Context) {
 	successResponse(c, instance)
 }
 
+func (a *Application) deleteKOSInstance(c *gin.Context) {
+	id, ok := getObjectID(c, "id")
+	if !ok {
+		return
+	}
+
+	instance, err := a.repos.KOSInstance.GetByID(c.Request.Context(), id)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to get KOS instance")
+		return
+	}
+	if instance == nil {
+		errorResponse(c, http.StatusNotFound, "NOT_FOUND", "KOS instance not found")
+		return
+	}
+
+	// Only allow deletion if status is pending or deactivated
+	if instance.Status != models.KOSStatusPending && instance.Status != models.KOSStatusDeactivated {
+		errorResponse(c, http.StatusConflict, "CANNOT_DELETE", "Can only delete pending or deactivated KOS instances. Deactivate first.")
+		return
+	}
+
+	if err := a.repos.KOSInstance.Delete(c.Request.Context(), id); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to delete KOS instance")
+		return
+	}
+
+	successResponse(c, gin.H{"deleted": true})
+}
+
+func (a *Application) deactivateKOSInstance(c *gin.Context) {
+	id, ok := getObjectID(c, "id")
+	if !ok {
+		return
+	}
+
+	instance, err := a.repos.KOSInstance.GetByID(c.Request.Context(), id)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to get KOS instance")
+		return
+	}
+	if instance == nil {
+		errorResponse(c, http.StatusNotFound, "NOT_FOUND", "KOS instance not found")
+		return
+	}
+
+	instance.Status = models.KOSStatusDeactivated
+
+	if err := a.repos.KOSInstance.Update(c.Request.Context(), instance); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to deactivate KOS instance")
+		return
+	}
+
+	successResponse(c, instance)
+}
+
+func (a *Application) activateKOSInstance(c *gin.Context) {
+	id, ok := getObjectID(c, "id")
+	if !ok {
+		return
+	}
+
+	instance, err := a.repos.KOSInstance.GetByID(c.Request.Context(), id)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to get KOS instance")
+		return
+	}
+	if instance == nil {
+		errorResponse(c, http.StatusNotFound, "NOT_FOUND", "KOS instance not found")
+		return
+	}
+
+	// Reset to pending - requires re-provisioning
+	instance.Status = models.KOSStatusPending
+	instance.CertificatePEM = ""
+	instance.PrivateKeyPEM = ""
+	instance.CertificateSerial = ""
+	instance.RegisteredAt = nil
+
+	if err := a.repos.KOSInstance.Update(c.Request.Context(), instance); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to activate KOS instance")
+		return
+	}
+
+	successResponse(c, instance)
+}
+
 // ProvisioningBundle contains all data needed to provision a KOS instance
 type ProvisioningBundle struct {
 	KOSID          string `json:"kos_id"`
@@ -215,7 +304,17 @@ func (a *Application) getKOSProvisioningBundle(c *gin.Context) {
 		OrderPollSecs:  30,  // 30 seconds
 	}
 
-	successResponse(c, bundle)
+	// Return as downloadable JSON file
+	bundleJSON, err := json.MarshalIndent(bundle, "", "  ")
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "JSON_ERROR", "Failed to serialize bundle")
+		return
+	}
+
+	filename := fmt.Sprintf("kos-provisioning-%s.json", instance.ID.Hex())
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Header("Content-Type", "application/json")
+	c.Data(http.StatusOK, "application/json", bundleJSON)
 }
 
 func (a *Application) regenerateKOSCertificate(c *gin.Context) {

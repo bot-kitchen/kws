@@ -263,7 +263,9 @@ func (w *WebHandlers) RegisterRoutes(r *gin.Engine) {
 		protected.POST("/tenants/:id/select", w.SelectTenant)
 		protected.POST("/tenants/clear/select", w.ClearTenantSelection)
 		protected.GET("/sites", w.Sites)
+		protected.GET("/sites/new", w.SiteNew)
 		protected.GET("/sites/:id", w.SiteDetail)
+		protected.GET("/sites/:id/edit", w.SiteEdit)
 		protected.GET("/kos", w.KOSInstances)
 		protected.GET("/kos/new", w.KOSNew)
 		protected.GET("/kos/:id", w.KOSDetail)
@@ -741,18 +743,262 @@ func (w *WebHandlers) TenantDetail(c *gin.Context) {
 	w.renderTemplate(c, "tenants-view", data)
 }
 
-// Sites renders the sites page
+// Sites renders the sites page with region tag management
 func (w *WebHandlers) Sites(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantIDStr := middleware.GetEffectiveTenantID(c)
+
+	if tenantIDStr == "" {
+		c.Redirect(http.StatusFound, "/tenants")
+		return
+	}
+
+	tenantID, err := primitive.ObjectIDFromHex(tenantIDStr)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/tenants")
+		return
+	}
+
+	// Load regions for this tenant (for tag pills)
+	regionData := []gin.H{}
+	regions, _, _ := w.handlers.repos.Region.ListByTenant(ctx, tenantID, 1, 100)
+	regionMap := make(map[string]string) // ID -> Name
+	for _, r := range regions {
+		regionMap[r.ID.Hex()] = r.Name
+		// Count sites per region
+		siteCount, _, _ := w.handlers.repos.Site.ListByRegion(ctx, r.ID, 1, 1)
+		regionData = append(regionData, gin.H{
+			"ID":        r.ID.Hex(),
+			"Name":      r.Name,
+			"Code":      r.Code,
+			"Timezone":  r.Timezone,
+			"SiteCount": len(siteCount),
+		})
+	}
+
+	// Load sites for this tenant
+	siteData := []gin.H{}
+	sites, total, _ := w.handlers.repos.Site.ListByTenant(ctx, tenantID, 1, 100)
+
+	var withKOS, withoutKOS int
+	for _, s := range sites {
+		// Check if site has KOS instance
+		kos, _ := w.handlers.repos.KOSInstance.GetBySiteID(ctx, s.ID)
+		hasKOS := kos != nil
+		var kosStatus string
+		if kos != nil {
+			kosStatus = string(kos.Status)
+			withKOS++
+		} else {
+			withoutKOS++
+		}
+
+		// Get region name
+		regionName := regionMap[s.RegionID.Hex()]
+
+		siteItem := gin.H{
+			"ID":         s.ID.Hex(),
+			"Name":       s.Name,
+			"Code":       s.Code,
+			"RegionID":   s.RegionID.Hex(),
+			"RegionName": regionName,
+			"Timezone":   s.Timezone,
+			"Status":     s.Status,
+			"HasKOS":     hasKOS,
+			"KOSStatus":  kosStatus,
+		}
+		if s.Address != nil {
+			siteItem["Address"] = gin.H{
+				"Street":     s.Address.Street,
+				"City":       s.Address.City,
+				"State":      s.Address.State,
+				"PostalCode": s.Address.PostalCode,
+				"Country":    s.Address.Country,
+			}
+			siteItem["AddressLine"] = s.Address.City + ", " + s.Address.State
+		}
+		siteData = append(siteData, siteItem)
+	}
+
 	data := gin.H{
 		"CurrentPage": "sites",
+		"TenantID":    tenantIDStr,
+		"Regions":     regionData,
+		"Sites":       siteData,
+		"Total":       total,
+		"WithKOS":     withKOS,
+		"WithoutKOS":  withoutKOS,
+		"HasRegions":  len(regions) > 0,
+		"RegionCount": len(regions),
 	}
 	w.renderTemplate(c, "sites-list", data)
 }
 
-// SiteDetail renders the site detail page
-func (w *WebHandlers) SiteDetail(c *gin.Context) {
+// SiteNew renders the new site form
+func (w *WebHandlers) SiteNew(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantIDStr := middleware.GetEffectiveTenantID(c)
+
+	if tenantIDStr == "" {
+		c.Redirect(http.StatusFound, "/tenants")
+		return
+	}
+
+	tenantID, err := primitive.ObjectIDFromHex(tenantIDStr)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/tenants")
+		return
+	}
+
+	// Load regions for dropdown
+	regionData := []gin.H{}
+	regions, _, _ := w.handlers.repos.Region.ListByTenant(ctx, tenantID, 1, 100)
+	for _, r := range regions {
+		regionData = append(regionData, gin.H{
+			"ID":   r.ID.Hex(),
+			"Name": r.Name,
+			"Code": r.Code,
+		})
+	}
+
 	data := gin.H{
 		"CurrentPage": "sites",
+		"TenantID":    tenantIDStr,
+		"Regions":     regionData,
+		"Site":        gin.H{},
+		"IsNew":       true,
+	}
+	w.renderTemplate(c, "sites-form", data)
+}
+
+// SiteEdit renders the site edit form
+func (w *WebHandlers) SiteEdit(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantIDStr := middleware.GetEffectiveTenantID(c)
+	siteIDStr := c.Param("id")
+
+	if tenantIDStr == "" {
+		c.Redirect(http.StatusFound, "/tenants")
+		return
+	}
+
+	tenantID, err := primitive.ObjectIDFromHex(tenantIDStr)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/tenants")
+		return
+	}
+
+	siteID, err := primitive.ObjectIDFromHex(siteIDStr)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/sites")
+		return
+	}
+
+	site, err := w.handlers.repos.Site.GetByID(ctx, siteID)
+	if err != nil || site == nil {
+		c.Redirect(http.StatusFound, "/sites")
+		return
+	}
+
+	// Load regions for dropdown
+	regionData := []gin.H{}
+	regions, _, _ := w.handlers.repos.Region.ListByTenant(ctx, tenantID, 1, 100)
+	for _, r := range regions {
+		regionData = append(regionData, gin.H{
+			"ID":   r.ID.Hex(),
+			"Name": r.Name,
+			"Code": r.Code,
+		})
+	}
+
+	siteItem := gin.H{
+		"ID":       site.ID.Hex(),
+		"Name":     site.Name,
+		"Code":     site.Code,
+		"RegionID": site.RegionID.Hex(),
+		"Timezone": site.Timezone,
+	}
+	if site.Address != nil {
+		siteItem["Street"] = site.Address.Street
+		siteItem["City"] = site.Address.City
+		siteItem["State"] = site.Address.State
+		siteItem["PostalCode"] = site.Address.PostalCode
+		siteItem["Country"] = site.Address.Country
+	}
+
+	data := gin.H{
+		"CurrentPage": "sites",
+		"TenantID":    tenantIDStr,
+		"Regions":     regionData,
+		"Site":        siteItem,
+		"IsNew":       false,
+	}
+	w.renderTemplate(c, "sites-form", data)
+}
+
+// SiteDetail renders the site detail page
+func (w *WebHandlers) SiteDetail(c *gin.Context) {
+	ctx := c.Request.Context()
+	siteIDStr := c.Param("id")
+
+	siteID, err := primitive.ObjectIDFromHex(siteIDStr)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/sites")
+		return
+	}
+
+	site, err := w.handlers.repos.Site.GetByID(ctx, siteID)
+	if err != nil || site == nil {
+		c.Redirect(http.StatusFound, "/sites")
+		return
+	}
+
+	// Get region info
+	region, _ := w.handlers.repos.Region.GetByID(ctx, site.RegionID)
+	var regionName string
+	if region != nil {
+		regionName = region.Name
+	}
+
+	// Get KOS instance if any
+	kos, _ := w.handlers.repos.KOSInstance.GetBySiteID(ctx, site.ID)
+	var kosData gin.H
+	if kos != nil {
+		kosData = gin.H{
+			"ID":                kos.ID.Hex(),
+			"Name":              kos.Name,
+			"Status":            string(kos.Status),
+			"Version":           kos.Version,
+			"LastHeartbeat":     kos.LastHeartbeat,
+			"CertificateExpiry": kos.CertificateExpiry,
+		}
+	}
+
+	siteItem := gin.H{
+		"ID":         site.ID.Hex(),
+		"Name":       site.Name,
+		"Code":       site.Code,
+		"RegionID":   site.RegionID.Hex(),
+		"RegionName": regionName,
+		"Timezone":   site.Timezone,
+		"Status":     site.Status,
+		"CreatedAt":  site.CreatedAt.Format("Jan 02, 2006"),
+	}
+	if site.Address != nil {
+		siteItem["Address"] = gin.H{
+			"Street":     site.Address.Street,
+			"City":       site.Address.City,
+			"State":      site.Address.State,
+			"PostalCode": site.Address.PostalCode,
+			"Country":    site.Address.Country,
+		}
+	}
+
+	data := gin.H{
+		"CurrentPage": "sites",
+		"Site":        siteItem,
+		"KOS":         kosData,
+		"HasKOS":      kos != nil,
 	}
 	w.renderTemplate(c, "sites-view", data)
 }
@@ -801,16 +1047,123 @@ func (w *WebHandlers) KOSInstances(c *gin.Context) {
 
 // KOSNew renders the new KOS form
 func (w *WebHandlers) KOSNew(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantIDStr := middleware.GetEffectiveTenantID(c)
+
+	// Get pre-selected site if passed as query param
+	preselectedSiteID := c.Query("site_id")
+
+	// Load sites without KOS instances (available for assignment)
+	availableSites := []gin.H{}
+	if tenantIDStr != "" && tenantIDStr != "platform" {
+		tenantID, err := primitive.ObjectIDFromHex(tenantIDStr)
+		if err == nil {
+			// Get all sites for the tenant
+			sites, _, _ := w.handlers.repos.Site.ListByTenant(ctx, tenantID, 1, 100)
+			for _, site := range sites {
+				// Check if site already has a KOS instance
+				existingKOS, _ := w.handlers.repos.KOSInstance.GetBySiteID(ctx, site.ID)
+				if existingKOS == nil {
+					// Get region name
+					regionName := ""
+					if region, _ := w.handlers.repos.Region.GetByID(ctx, site.RegionID); region != nil {
+						regionName = region.Name
+					}
+
+					availableSites = append(availableSites, gin.H{
+						"ID":         site.ID.Hex(),
+						"Name":       site.Name,
+						"Code":       site.Code,
+						"RegionID":   site.RegionID.Hex(),
+						"RegionName": regionName,
+					})
+				}
+			}
+		}
+	}
+
 	data := gin.H{
-		"CurrentPage": "kos",
+		"CurrentPage":       "kos",
+		"TenantID":          tenantIDStr,
+		"AvailableSites":    availableSites,
+		"PreselectedSiteID": preselectedSiteID,
+		"KOS":               gin.H{},
+		"IsNew":             true,
 	}
 	w.renderTemplate(c, "kos-form", data)
 }
 
 // KOSDetail renders the KOS detail page
 func (w *WebHandlers) KOSDetail(c *gin.Context) {
+	ctx := c.Request.Context()
+	kosIDStr := c.Param("id")
+
+	kosID, err := primitive.ObjectIDFromHex(kosIDStr)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/kos")
+		return
+	}
+
+	kos, err := w.handlers.repos.KOSInstance.GetByID(ctx, kosID)
+	if err != nil || kos == nil {
+		c.Redirect(http.StatusFound, "/kos")
+		return
+	}
+
+	// Get site info
+	var siteName, siteCode string
+	if site, _ := w.handlers.repos.Site.GetByID(ctx, kos.SiteID); site != nil {
+		siteName = site.Name
+		siteCode = site.Code
+	}
+
+	// Get region info
+	var regionName string
+	if region, _ := w.handlers.repos.Region.GetByID(ctx, kos.RegionID); region != nil {
+		regionName = region.Name
+	}
+
+	// Format last heartbeat
+	lastHeartbeat := "Never"
+	if kos.LastHeartbeat != nil && !kos.LastHeartbeat.IsZero() {
+		lastHeartbeat = formatRelativeTime(*kos.LastHeartbeat)
+	}
+
+	// Format certificate expiry
+	certExpiry := ""
+	certExpiryDays := 0
+	if !kos.CertificateExpiry.IsZero() {
+		certExpiry = kos.CertificateExpiry.Format("Jan 02, 2006")
+		certExpiryDays = int(time.Until(kos.CertificateExpiry).Hours() / 24)
+	}
+
+	// Format registered at
+	registeredAt := ""
+	if kos.RegisteredAt != nil && !kos.RegisteredAt.IsZero() {
+		registeredAt = kos.RegisteredAt.Format("Jan 02, 2006 15:04")
+	}
+
+	kosItem := gin.H{
+		"ID":                kos.ID.Hex(),
+		"Name":              kos.Name,
+		"SiteID":            kos.SiteID.Hex(),
+		"SiteName":          siteName,
+		"SiteCode":          siteCode,
+		"RegionName":        regionName,
+		"Status":            string(kos.Status),
+		"Version":           kos.Version,
+		"LastHeartbeat":     lastHeartbeat,
+		"CertificateSerial": kos.CertificateSerial,
+		"CertificateExpiry": certExpiry,
+		"CertExpiryDays":    certExpiryDays,
+		"RegisteredAt":      registeredAt,
+		"HasCertificate":    kos.CertificatePEM != "",
+		"CreatedAt":         kos.CreatedAt.Format("Jan 02, 2006"),
+	}
+
 	data := gin.H{
 		"CurrentPage": "kos",
+		"KOS":         kosItem,
 	}
 	w.renderTemplate(c, "kos-view", data)
 }

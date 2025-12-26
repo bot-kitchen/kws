@@ -141,6 +141,7 @@ func (a *Application) setupRoutes() {
 			regions.POST("", a.createRegion)
 			regions.GET("/:id", a.getRegion)
 			regions.PUT("/:id", a.updateRegion)
+			regions.DELETE("/:id", a.deleteRegion)
 		}
 
 		// Site management
@@ -150,6 +151,7 @@ func (a *Application) setupRoutes() {
 			sites.POST("", a.createSite)
 			sites.GET("/:id", a.getSite)
 			sites.PUT("/:id", a.updateSite)
+			sites.DELETE("/:id", a.deleteSite)
 		}
 
 		// Kitchen management
@@ -170,6 +172,9 @@ func (a *Application) setupRoutes() {
 			kos.PUT("/:id", a.updateKOSInstance)
 			kos.GET("/:id/provisioning-bundle", a.getKOSProvisioningBundle)
 			kos.POST("/:id/regenerate-certificate", a.regenerateKOSCertificate)
+			kos.DELETE("/:id", a.deleteKOSInstance)
+			kos.POST("/:id/deactivate", a.deactivateKOSInstance)
+			kos.POST("/:id/activate", a.activateKOSInstance)
 		}
 
 		// Ingredient management

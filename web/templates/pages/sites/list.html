@@ -2,15 +2,470 @@
 {{define "page-title"}}Sites{{end}}
 
 {{define "sites-list"}}
-<div class="space-y-6">
-    <div class="flex items-center justify-between">
-        <p class="text-gray-500 dark:text-gray-400">Manage site locations</p>
+<div class="flex flex-col gap-6">
+    <!-- Page Header -->
+    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+            <h1 class="text-3xl md:text-4xl font-bold tracking-tight mb-2">Sites</h1>
+            <p class="text-gray-500 dark:text-text-secondary text-sm md:text-base">
+                Manage site locations and their KOS instances
+            </p>
+        </div>
+        {{if .HasRegions}}
+        <a href="/sites/new"
+           class="flex items-center justify-center gap-2 rounded-lg bg-primary hover:bg-primary/90 text-white px-6 py-3 text-sm font-bold transition-all shadow-[0_0_15px_rgba(110,86,207,0.3)]">
+            <span class="material-symbols-outlined text-xl">add</span>
+            <span>Add Site</span>
+        </a>
+        {{else}}
+        <button disabled
+           class="flex items-center justify-center gap-2 rounded-lg bg-gray-400 text-white px-6 py-3 text-sm font-bold cursor-not-allowed"
+           title="Create a region first">
+            <span class="material-symbols-outlined text-xl">add</span>
+            <span>Add Site</span>
+        </button>
+        {{end}}
     </div>
+
+    <!-- Region Tags Section -->
+    <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-4">
+        <div class="flex flex-wrap items-center gap-3">
+            <span class="text-sm font-medium text-gray-600 dark:text-gray-400">Regions:</span>
+
+            <!-- All filter -->
+            <button type="button" data-region="" class="region-filter-btn px-3 py-1.5 text-sm font-medium rounded-lg bg-primary text-white transition-colors">
+                All ({{.Total}})
+            </button>
+
+            <!-- Region tag pills -->
+            {{range .Regions}}
+            <div class="relative group">
+                <button type="button" data-region="{{.ID}}" class="region-filter-btn flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-100 dark:bg-surface-highlight text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-border-dark transition-colors">
+                    <span class="material-symbols-outlined text-sm">map</span>
+                    <span>{{.Name}}</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-500">({{.SiteCount}})</span>
+                </button>
+                <!-- Kebab menu -->
+                <div class="absolute right-0 top-0 translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onclick="showRegionMenu('{{.ID}}', '{{.Name}}', '{{.Code}}', '{{.Timezone}}')" class="p-1 bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-full shadow-sm hover:bg-gray-100 dark:hover:bg-surface-highlight">
+                        <span class="material-symbols-outlined text-sm text-gray-500">more_vert</span>
+                    </button>
+                </div>
+            </div>
+            {{end}}
+
+            <!-- Add Region button -->
+            <button onclick="openRegionModal()" class="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border-2 border-dashed border-gray-300 dark:border-border-dark text-gray-500 dark:text-gray-400 hover:border-primary hover:text-primary transition-colors">
+                <span class="material-symbols-outlined text-sm">add</span>
+                <span>Add Region</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-4">
+            <div class="flex items-center gap-2 text-gray-500 dark:text-text-secondary mb-1">
+                <span class="material-symbols-outlined text-lg">location_on</span>
+                <span class="text-sm font-medium">Total Sites</span>
+            </div>
+            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{.Total}}</p>
+        </div>
+        <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-4">
+            <div class="flex items-center gap-2 text-green-600 dark:text-green-400 mb-1">
+                <span class="material-symbols-outlined text-lg">dns</span>
+                <span class="text-sm font-medium">With KOS</span>
+            </div>
+            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{.WithKOS}}</p>
+        </div>
+        <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-4">
+            <div class="flex items-center gap-2 text-yellow-600 dark:text-yellow-400 mb-1">
+                <span class="material-symbols-outlined text-lg">pending</span>
+                <span class="text-sm font-medium">Without KOS</span>
+            </div>
+            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{.WithoutKOS}}</p>
+        </div>
+        <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-4">
+            <div class="flex items-center gap-2 text-blue-600 dark:text-blue-400 mb-1">
+                <span class="material-symbols-outlined text-lg">map</span>
+                <span class="text-sm font-medium">Regions</span>
+            </div>
+            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{.RegionCount}}</p>
+        </div>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="flex flex-wrap gap-3 items-center">
+        <div class="relative ml-auto">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">search</span>
+            <input type="text" id="search-sites" placeholder="Search sites..." class="pl-10 pr-4 py-2 text-sm bg-white dark:bg-surface-dark border border-gray-300 dark:border-border-dark rounded-lg text-gray-900 dark:text-white w-64">
+        </div>
+    </div>
+
+    <!-- Sites Cards Grid -->
+    {{if .Sites}}
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {{range .Sites}}
+        <div class="site-card bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-4 hover:border-primary/50 transition-all duration-200"
+             data-name="{{.Name}}" data-region="{{.RegionID}}" data-id="{{.ID}}">
+            <!-- Card Header -->
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-xl text-primary">location_on</span>
+                    <span class="text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-surface-highlight text-gray-600 dark:text-gray-400">{{.Code}}</span>
+                </div>
+                <!-- KOS Status -->
+                {{if .HasKOS}}
+                <span class="flex items-center gap-1 text-xs px-2 py-0.5 rounded
+                    {{if eq .KOSStatus "online"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
+                    {{else if eq .KOSStatus "offline"}}bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400
+                    {{else if eq .KOSStatus "pending"}}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400
+                    {{else}}bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400{{end}}">
+                    <span class="w-1.5 h-1.5 rounded-full {{if eq .KOSStatus "online"}}bg-green-500{{else if eq .KOSStatus "offline"}}bg-red-500{{else}}bg-yellow-500{{end}}"></span>
+                    KOS {{.KOSStatus}}
+                </span>
+                {{else}}
+                <span class="flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-500">
+                    <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+                    No KOS
+                </span>
+                {{end}}
+            </div>
+
+            <!-- Site Name -->
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-1 truncate" title="{{.Name}}">{{.Name}}</h3>
+
+            <!-- Region Badge -->
+            <div class="flex items-center gap-1.5 mb-2">
+                <span class="material-symbols-outlined text-xs text-gray-400">map</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">{{.RegionName}}</span>
+            </div>
+
+            <!-- Address -->
+            {{if .AddressLine}}
+            <p class="text-xs text-gray-500 dark:text-text-secondary mb-3 truncate" title="{{.AddressLine}}">
+                <span class="material-symbols-outlined text-xs align-middle mr-1">pin_drop</span>
+                {{.AddressLine}}
+            </p>
+            {{end}}
+
+            <!-- Action Buttons -->
+            <div class="flex gap-2 pt-3 border-t border-gray-100 dark:border-border-dark">
+                <a href="/sites/{{.ID}}" class="flex-1 flex items-center justify-center gap-1 p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-surface-highlight hover:text-gray-700 dark:hover:text-white transition-colors text-xs font-medium">
+                    <span class="material-symbols-outlined text-sm">visibility</span>
+                    View
+                </a>
+                <a href="/sites/{{.ID}}/edit" class="flex-1 flex items-center justify-center gap-1 p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-surface-highlight hover:text-gray-700 dark:hover:text-white transition-colors text-xs font-medium">
+                    <span class="material-symbols-outlined text-sm">edit</span>
+                    Edit
+                </a>
+                <button onclick="deleteSite('{{.ID}}', '{{.Name}}')" class="flex-1 flex items-center justify-center gap-1 p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 transition-colors text-xs font-medium">
+                    <span class="material-symbols-outlined text-sm">delete</span>
+                    Delete
+                </button>
+            </div>
+        </div>
+        {{end}}
+    </div>
+    {{else}}
     <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-12 text-center">
-        <span class="material-symbols-outlined text-4xl text-gray-400 mb-4">location_on</span>
-        <p class="text-gray-500 dark:text-text-secondary">Sites page coming soon</p>
+        {{if .HasRegions}}
+        <span class="material-symbols-outlined text-4xl text-gray-400 mb-4 block">location_on</span>
+        <p class="text-gray-500 dark:text-text-secondary mb-4">No sites yet. Create your first site to get started.</p>
+        <a href="/sites/new" class="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium">
+            <span class="material-symbols-outlined text-lg">add</span>
+            Add Site
+        </a>
+        {{else}}
+        <span class="material-symbols-outlined text-4xl text-gray-400 mb-4 block">map</span>
+        <p class="text-gray-500 dark:text-text-secondary mb-4">Create a region first before adding sites.</p>
+        <button onclick="openRegionModal()" class="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium">
+            <span class="material-symbols-outlined text-lg">add</span>
+            Add Region
+        </button>
+        {{end}}
+    </div>
+    {{end}}
+</div>
+
+<!-- Region Modal -->
+<div id="regionModal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+    <div class="flex min-h-screen items-center justify-center p-4">
+        <div class="fixed inset-0 bg-black/50 transition-opacity" onclick="closeRegionModal()"></div>
+        <div class="relative bg-white dark:bg-surface-dark rounded-xl shadow-xl max-w-md w-full p-6 z-10">
+            <h3 id="regionModalTitle" class="text-lg font-bold text-gray-900 dark:text-white mb-4">Add Region</h3>
+            <form id="regionForm">
+                <input type="hidden" id="regionId" name="id">
+                <div class="space-y-4">
+                    <div>
+                        <label for="regionName" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name *</label>
+                        <input type="text" id="regionName" name="name" required
+                               class="w-full px-3 py-2 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg text-gray-900 dark:text-white"
+                               placeholder="e.g., West Coast">
+                    </div>
+                    <div>
+                        <label for="regionCode" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Code *</label>
+                        <input type="text" id="regionCode" name="code" required
+                               class="w-full px-3 py-2 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg text-gray-900 dark:text-white"
+                               placeholder="e.g., west-coast">
+                    </div>
+                    <div>
+                        <label for="regionTimezone" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Timezone</label>
+                        <input type="text" id="regionTimezone" name="timezone"
+                               class="w-full px-3 py-2 bg-gray-50 dark:bg-surface-highlight border border-gray-300 dark:border-border-dark rounded-lg text-gray-900 dark:text-white"
+                               placeholder="e.g., America/Los_Angeles">
+                    </div>
+                </div>
+                <div id="regionError" class="hidden mt-3 p-3 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm"></div>
+                <div class="flex gap-3 mt-6">
+                    <button type="button" onclick="closeRegionModal()" class="flex-1 px-4 py-2 bg-gray-100 dark:bg-surface-highlight text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-border-dark transition-colors">
+                        Cancel
+                    </button>
+                    <button type="submit" id="regionSubmitBtn" class="flex-1 px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors">
+                        Save Region
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
-{{end}}
 
-{{define "scripts"}}{{end}}
+<!-- Region Menu Popup -->
+<div id="regionMenuPopup" class="hidden fixed z-50 bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-lg shadow-lg py-1">
+    <button onclick="editRegion()" class="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-surface-highlight flex items-center gap-2">
+        <span class="material-symbols-outlined text-sm">edit</span>
+        Edit
+    </button>
+    <button onclick="deleteRegion()" class="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2">
+        <span class="material-symbols-outlined text-sm">delete</span>
+        Delete
+    </button>
+</div>
+
+<!-- Delete Site Modal -->
+<div id="deleteSiteModal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+    <div class="flex min-h-screen items-center justify-center p-4">
+        <div class="fixed inset-0 bg-black/50 transition-opacity" onclick="closeDeleteSiteModal()"></div>
+        <div class="relative bg-white dark:bg-surface-dark rounded-xl shadow-xl max-w-md w-full p-6 z-10">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">Delete Site</h3>
+            <p class="text-gray-600 dark:text-gray-400 mb-4">Are you sure you want to delete <span id="deleteSiteName" class="font-semibold"></span>?</p>
+            <div id="deleteSiteError" class="hidden mb-4 p-3 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm"></div>
+            <input type="hidden" id="deleteSiteId">
+            <div class="flex gap-3">
+                <button type="button" onclick="closeDeleteSiteModal()" class="flex-1 px-4 py-2 bg-gray-100 dark:bg-surface-highlight text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-border-dark transition-colors">
+                    Cancel
+                </button>
+                <button type="button" onclick="confirmDeleteSite()" id="deleteSiteBtn" class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors">
+                    Delete
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentRegion = null;
+let isEditMode = false;
+
+// Region filtering
+document.querySelectorAll('.region-filter-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const regionId = this.dataset.region;
+
+        // Update active state
+        document.querySelectorAll('.region-filter-btn').forEach(b => {
+            b.classList.remove('bg-primary', 'text-white');
+            b.classList.add('bg-gray-100', 'dark:bg-surface-highlight', 'text-gray-700', 'dark:text-gray-300');
+        });
+        this.classList.remove('bg-gray-100', 'dark:bg-surface-highlight', 'text-gray-700', 'dark:text-gray-300');
+        this.classList.add('bg-primary', 'text-white');
+
+        // Filter sites
+        document.querySelectorAll('.site-card').forEach(card => {
+            if (!regionId || card.dataset.region === regionId) {
+                card.style.display = '';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    });
+});
+
+// Search sites
+document.getElementById('search-sites')?.addEventListener('input', function(e) {
+    const searchTerm = e.target.value.toLowerCase();
+    document.querySelectorAll('.site-card').forEach(card => {
+        const name = card.dataset.name.toLowerCase();
+        card.style.display = name.includes(searchTerm) ? '' : 'none';
+    });
+});
+
+// Region modal functions
+function openRegionModal() {
+    isEditMode = false;
+    document.getElementById('regionModalTitle').textContent = 'Add Region';
+    document.getElementById('regionForm').reset();
+    document.getElementById('regionId').value = '';
+    document.getElementById('regionCode').disabled = false;
+    document.getElementById('regionError').classList.add('hidden');
+    document.getElementById('regionModal').classList.remove('hidden');
+}
+
+function closeRegionModal() {
+    document.getElementById('regionModal').classList.add('hidden');
+}
+
+function showRegionMenu(id, name, code, timezone) {
+    currentRegion = { id, name, code, timezone };
+    const popup = document.getElementById('regionMenuPopup');
+    popup.style.left = (event.clientX - 50) + 'px';
+    popup.style.top = (event.clientY + 10) + 'px';
+    popup.classList.remove('hidden');
+
+    // Close on click outside
+    setTimeout(() => {
+        document.addEventListener('click', closeRegionMenu, { once: true });
+    }, 0);
+}
+
+function closeRegionMenu() {
+    document.getElementById('regionMenuPopup').classList.add('hidden');
+}
+
+function editRegion() {
+    if (!currentRegion) return;
+    closeRegionMenu();
+    isEditMode = true;
+    document.getElementById('regionModalTitle').textContent = 'Edit Region';
+    document.getElementById('regionId').value = currentRegion.id;
+    document.getElementById('regionName').value = currentRegion.name;
+    document.getElementById('regionCode').value = currentRegion.code;
+    document.getElementById('regionCode').disabled = true; // Can't change code
+    document.getElementById('regionTimezone').value = currentRegion.timezone || '';
+    document.getElementById('regionError').classList.add('hidden');
+    document.getElementById('regionModal').classList.remove('hidden');
+}
+
+async function deleteRegion() {
+    if (!currentRegion) return;
+    closeRegionMenu();
+
+    if (!confirm(`Delete region "${currentRegion.name}"? This will fail if the region has sites.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/v1/regions/${currentRegion.id}`, { method: 'DELETE' });
+        const data = await response.json();
+
+        if (!response.ok) {
+            alert(data.error?.message || data.error || 'Failed to delete region');
+            return;
+        }
+        window.location.reload();
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Failed to delete region: ' + error.message);
+    }
+}
+
+// Get tenant ID from template
+const TENANT_ID = '{{.TenantID}}';
+
+// Region form submission
+document.getElementById('regionForm')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const errorDiv = document.getElementById('regionError');
+    const submitBtn = document.getElementById('regionSubmitBtn');
+
+    const formData = {
+        name: document.getElementById('regionName').value,
+        code: document.getElementById('regionCode').value,
+        timezone: document.getElementById('regionTimezone').value,
+        tenant_id: TENANT_ID
+    };
+
+    try {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Saving...';
+
+        let response;
+        if (isEditMode) {
+            const regionId = document.getElementById('regionId').value;
+            response = await fetch(`/api/v1/regions/${regionId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+        } else {
+            response = await fetch('/api/v1/regions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+        }
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error?.message || data.error || 'Failed to save region');
+        }
+
+        window.location.reload();
+    } catch (error) {
+        console.error('Error:', error);
+        errorDiv.textContent = error.message;
+        errorDiv.classList.remove('hidden');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Save Region';
+    }
+});
+
+// Delete site functions
+function deleteSite(id, name) {
+    document.getElementById('deleteSiteId').value = id;
+    document.getElementById('deleteSiteName').textContent = name;
+    document.getElementById('deleteSiteError').classList.add('hidden');
+    document.getElementById('deleteSiteModal').classList.remove('hidden');
+}
+
+function closeDeleteSiteModal() {
+    document.getElementById('deleteSiteModal').classList.add('hidden');
+}
+
+async function confirmDeleteSite() {
+    const id = document.getElementById('deleteSiteId').value;
+    const errorDiv = document.getElementById('deleteSiteError');
+    const btn = document.getElementById('deleteSiteBtn');
+
+    try {
+        btn.disabled = true;
+        btn.textContent = 'Deleting...';
+
+        const response = await fetch(`/api/v1/sites/${id}`, { method: 'DELETE' });
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error?.message || data.error || 'Failed to delete site');
+        }
+
+        window.location.reload();
+    } catch (error) {
+        console.error('Error:', error);
+        errorDiv.textContent = error.message;
+        errorDiv.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = 'Delete';
+    }
+}
+
+// Close modals on Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeRegionModal();
+        closeDeleteSiteModal();
+        closeRegionMenu();
+    }
+});
+</script>
+{{end}}

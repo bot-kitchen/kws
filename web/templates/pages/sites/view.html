@@ -1,13 +1,236 @@
-{{define "title"}}Site Detail - KWS{{end}}
-{{define "page-title"}}Site Detail{{end}}
-
 {{define "sites-view"}}
-<div class="space-y-6">
-    <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-12 text-center">
-        <span class="material-symbols-outlined text-4xl text-gray-400 mb-4">location_on</span>
-        <p class="text-gray-500 dark:text-text-secondary">Site detail page coming soon</p>
+<div class="max-w-4xl mx-auto space-y-6">
+    <!-- Page Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+        <div>
+            <div class="flex items-center gap-3 mb-2">
+                <h1 class="text-3xl md:text-4xl font-bold tracking-tight">{{.Site.Name}}</h1>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                    {{if eq .Site.Status "active"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
+                    {{else if eq .Site.Status "maintenance"}}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400
+                    {{else}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400{{end}}">
+                    {{.Site.Status}}
+                </span>
+            </div>
+            <p class="text-gray-500 dark:text-text-secondary text-sm md:text-base flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm">tag</span>
+                {{.Site.Code}}
+                {{if .Site.RegionName}}
+                <span class="text-gray-300 dark:text-gray-600">|</span>
+                <span class="material-symbols-outlined text-sm">location_on</span>
+                {{.Site.RegionName}}
+                {{end}}
+            </p>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="/sites/{{.Site.ID}}/edit"
+               class="flex items-center gap-2 rounded-lg bg-primary hover:bg-primary/90 text-white px-4 py-2 text-sm font-bold transition-all">
+                <span class="material-symbols-outlined text-lg">edit</span>
+                <span>Edit</span>
+            </a>
+            <button type="button" onclick="openDeleteModal()"
+                    class="flex items-center gap-2 rounded-lg bg-red-600 hover:bg-red-700 text-white px-4 py-2 text-sm font-bold transition-all">
+                <span class="material-symbols-outlined text-lg">delete</span>
+                <span>Delete</span>
+            </button>
+            <a href="/sites"
+               class="flex items-center gap-2 rounded-lg bg-gray-100 dark:bg-surface-highlight hover:bg-gray-200 dark:hover:bg-border-dark text-gray-700 dark:text-white px-4 py-2 text-sm font-medium transition-colors">
+                <span class="material-symbols-outlined text-lg">arrow_back</span>
+                <span>Back</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Site Details Card -->
+    <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-6">
+        <h2 class="flex items-center gap-2 text-xl font-semibold mb-6 text-gray-900 dark:text-white">
+            <span class="material-symbols-outlined text-primary">store</span>
+            Site Details
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Site Name</p>
+                <p class="text-gray-900 dark:text-white font-medium">{{.Site.Name}}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Site Code</p>
+                <p class="text-gray-900 dark:text-white font-mono">{{.Site.Code}}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Region</p>
+                <p class="text-gray-900 dark:text-white">
+                    {{if .Site.RegionName}}{{.Site.RegionName}}{{else}}<span class="text-gray-400">Not assigned</span>{{end}}
+                </p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Timezone</p>
+                <p class="text-gray-900 dark:text-white">
+                    {{if .Site.Timezone}}{{.Site.Timezone}}{{else}}<span class="text-gray-400">Inherited from region</span>{{end}}
+                </p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Status</p>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                    {{if eq .Site.Status "active"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
+                    {{else if eq .Site.Status "maintenance"}}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400
+                    {{else}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400{{end}}">
+                    {{.Site.Status}}
+                </span>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Created</p>
+                <p class="text-gray-900 dark:text-white">{{.Site.CreatedAt}}</p>
+            </div>
+        </div>
+
+        {{if .Site.Address}}
+        <div class="mt-6 pt-6 border-t border-gray-200 dark:border-border-dark">
+            <h3 class="flex items-center gap-2 text-lg font-medium mb-4 text-gray-900 dark:text-white">
+                <span class="material-symbols-outlined text-gray-500">home</span>
+                Address
+            </h3>
+            <p class="text-gray-900 dark:text-white">
+                {{if .Site.Address.Street}}{{.Site.Address.Street}}<br>{{end}}
+                {{if .Site.Address.City}}{{.Site.Address.City}}{{end}}{{if .Site.Address.State}}, {{.Site.Address.State}}{{end}} {{.Site.Address.PostalCode}}
+                {{if .Site.Address.Country}}<br>{{.Site.Address.Country}}{{end}}
+            </p>
+        </div>
+        {{end}}
+    </div>
+
+    <!-- KOS Instance Card -->
+    <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-6">
+        <div class="flex items-center justify-between mb-6">
+            <h2 class="flex items-center gap-2 text-xl font-semibold text-gray-900 dark:text-white">
+                <span class="material-symbols-outlined text-primary">dns</span>
+                KOS Instance
+            </h2>
+            {{if .HasKOS}}
+            <a href="/kos/{{.KOS.ID}}"
+               class="flex items-center gap-2 text-primary hover:text-primary/80 text-sm font-medium transition-colors">
+                <span>View Details</span>
+                <span class="material-symbols-outlined text-lg">arrow_forward</span>
+            </a>
+            {{end}}
+        </div>
+
+        {{if .HasKOS}}
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Name</p>
+                <p class="text-gray-900 dark:text-white font-medium">{{.KOS.Name}}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Status</p>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium
+                    {{if eq .KOS.Status "online"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
+                    {{else if eq .KOS.Status "registered"}}bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400
+                    {{else if eq .KOS.Status "provisioned"}}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400
+                    {{else if eq .KOS.Status "pending"}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400
+                    {{else if eq .KOS.Status "offline"}}bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400
+                    {{else if eq .KOS.Status "deactivated"}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400
+                    {{else}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400{{end}}">
+                    {{if eq .KOS.Status "online"}}<span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>{{end}}
+                    {{.KOS.Status}}
+                </span>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Version</p>
+                <p class="text-gray-900 dark:text-white font-mono">
+                    {{if .KOS.Version}}{{.KOS.Version}}{{else}}<span class="text-gray-400">-</span>{{end}}
+                </p>
+            </div>
+            {{if .KOS.LastHeartbeat}}
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Last Heartbeat</p>
+                <p class="text-gray-900 dark:text-white text-sm">
+                    {{.KOS.LastHeartbeat}}
+                </p>
+            </div>
+            {{end}}
+        </div>
+        {{else}}
+        <div class="text-center py-8">
+            <span class="material-symbols-outlined text-4xl text-gray-400 mb-3 block">dns</span>
+            <p class="text-gray-500 dark:text-text-secondary mb-4">No KOS instance assigned to this site</p>
+            <a href="/kos/new?site_id={{.Site.ID}}"
+               class="inline-flex items-center gap-2 rounded-lg bg-primary hover:bg-primary/90 text-white px-4 py-2 text-sm font-bold transition-all">
+                <span class="material-symbols-outlined text-lg">add</span>
+                <span>Create KOS Instance</span>
+            </a>
+        </div>
+        {{end}}
     </div>
 </div>
-{{end}}
 
-{{define "scripts"}}{{end}}
+<!-- Delete Confirmation Modal -->
+<div id="delete-modal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeDeleteModal()"></div>
+        <div class="relative bg-white dark:bg-surface-dark rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Delete Site</h3>
+            <p class="text-gray-600 dark:text-gray-300 mb-6">
+                Are you sure you want to delete <strong>{{.Site.Name}}</strong>? This action cannot be undone.
+            </p>
+            {{if .HasKOS}}
+            <div class="p-3 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-400 text-sm mb-6">
+                <span class="material-symbols-outlined text-sm align-middle mr-1">warning</span>
+                This site has a KOS instance. Remove the KOS instance first before deleting the site.
+            </div>
+            {{end}}
+            <div class="flex gap-3 justify-end">
+                <button type="button" onclick="closeDeleteModal()"
+                        class="px-4 py-2 rounded-lg bg-gray-100 dark:bg-surface-highlight hover:bg-gray-200 dark:hover:bg-border-dark text-gray-700 dark:text-white text-sm font-medium transition-colors">
+                    Cancel
+                </button>
+                {{if not .HasKOS}}
+                <button type="button" onclick="deleteSite()"
+                        class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition-colors">
+                    Delete Site
+                </button>
+                {{end}}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openDeleteModal() {
+    document.getElementById('delete-modal').classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    document.getElementById('delete-modal').classList.add('hidden');
+}
+
+function deleteSite() {
+    fetch('/api/v1/sites/{{.Site.ID}}', {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => {
+        if (response.ok) {
+            window.location.href = '/sites';
+        } else {
+            return response.json().then(data => {
+                alert(data.error?.message || 'Failed to delete site');
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to delete site');
+    });
+}
+
+// Close modal on escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeDeleteModal();
+    }
+});
+</script>
+{{end}}

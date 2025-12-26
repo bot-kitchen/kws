@@ -446,6 +446,41 @@ func (a *Application) updateRegion(c *gin.Context) {
 	successResponse(c, region)
 }
 
+func (a *Application) deleteRegion(c *gin.Context) {
+	id, ok := getObjectID(c, "id")
+	if !ok {
+		return
+	}
+
+	region, err := a.repos.Region.GetByID(c.Request.Context(), id)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to get region")
+		return
+	}
+	if region == nil {
+		errorResponse(c, http.StatusNotFound, "NOT_FOUND", "Region not found")
+		return
+	}
+
+	// Check if region has sites
+	sites, _, err := a.repos.Site.ListByRegion(c.Request.Context(), id, 1, 1)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to check sites")
+		return
+	}
+	if len(sites) > 0 {
+		errorResponse(c, http.StatusConflict, "HAS_SITES", "Cannot delete region with sites. Move or delete sites first.")
+		return
+	}
+
+	if err := a.repos.Region.Delete(c.Request.Context(), id); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to delete region")
+		return
+	}
+
+	successResponse(c, gin.H{"deleted": true})
+}
+
 // ==================== Site handlers ====================
 
 type CreateSiteRequest struct {
@@ -590,6 +625,41 @@ func (a *Application) updateSite(c *gin.Context) {
 	}
 
 	successResponse(c, site)
+}
+
+func (a *Application) deleteSite(c *gin.Context) {
+	id, ok := getObjectID(c, "id")
+	if !ok {
+		return
+	}
+
+	site, err := a.repos.Site.GetByID(c.Request.Context(), id)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to get site")
+		return
+	}
+	if site == nil {
+		errorResponse(c, http.StatusNotFound, "NOT_FOUND", "Site not found")
+		return
+	}
+
+	// Check if site has a KOS instance
+	kos, err := a.repos.KOSInstance.GetBySiteID(c.Request.Context(), id)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to check KOS instance")
+		return
+	}
+	if kos != nil {
+		errorResponse(c, http.StatusConflict, "HAS_KOS", "Cannot delete site with KOS instance. Remove KOS instance first.")
+		return
+	}
+
+	if err := a.repos.Site.Delete(c.Request.Context(), id); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "DATABASE_ERROR", "Failed to delete site")
+		return
+	}
+
+	successResponse(c, gin.H{"deleted": true})
 }
 
 // ==================== Kitchen handlers ====================

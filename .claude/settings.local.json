@@ -34,7 +34,9 @@
       "Bash(timeout 8 make run:*)",
       "Bash(make css:*)",
       "Bash(timeout 5 make:*)",
-      "Bash(make clean:*)"
+      "Bash(make clean:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker ps:*)"
     ],
     "deny": [],
     "ask": [],

@@ -1,13 +1,437 @@
-{{define "title"}}KOS Instance Detail - KWS{{end}}
-{{define "page-title"}}KOS Instance Detail{{end}}
-
 {{define "kos-view"}}
-<div class="space-y-6">
-    <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-12 text-center">
-        <span class="material-symbols-outlined text-4xl text-gray-400 mb-4">devices</span>
-        <p class="text-gray-500 dark:text-text-secondary">KOS detail page coming soon</p>
+<div class="max-w-4xl mx-auto space-y-6">
+    <!-- Page Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+        <div>
+            <div class="flex items-center gap-3 mb-2">
+                <h1 class="text-3xl md:text-4xl font-bold tracking-tight">{{.KOS.Name}}</h1>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium
+                    {{if eq .KOS.Status "online"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
+                    {{else if eq .KOS.Status "registered"}}bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400
+                    {{else if eq .KOS.Status "provisioned"}}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400
+                    {{else if eq .KOS.Status "pending"}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400
+                    {{else if eq .KOS.Status "offline"}}bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400
+                    {{else if eq .KOS.Status "deactivated"}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400
+                    {{else}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400{{end}}">
+                    {{if eq .KOS.Status "online"}}<span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>{{end}}
+                    {{.KOS.Status}}
+                </span>
+            </div>
+            <p class="text-gray-500 dark:text-text-secondary text-sm md:text-base flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm">store</span>
+                {{if .KOS.SiteName}}{{.KOS.SiteName}}{{else}}No site assigned{{end}}
+                {{if .KOS.RegionName}}
+                <span class="text-gray-300 dark:text-gray-600">|</span>
+                <span class="material-symbols-outlined text-sm">location_on</span>
+                {{.KOS.RegionName}}
+                {{end}}
+            </p>
+        </div>
+        <div class="flex items-center gap-2">
+            {{if eq .KOS.Status "deactivated"}}
+            <button type="button" onclick="activateKOS()"
+                    class="flex items-center gap-2 rounded-lg bg-green-600 hover:bg-green-700 text-white px-4 py-2 text-sm font-bold transition-all">
+                <span class="material-symbols-outlined text-lg">power_settings_new</span>
+                <span>Activate</span>
+            </button>
+            {{else if or (eq .KOS.Status "online") (eq .KOS.Status "registered") (eq .KOS.Status "provisioned")}}
+            <button type="button" onclick="openDeactivateModal()"
+                    class="flex items-center gap-2 rounded-lg bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 text-sm font-bold transition-all">
+                <span class="material-symbols-outlined text-lg">power_off</span>
+                <span>Deactivate</span>
+            </button>
+            {{end}}
+            <button type="button" onclick="openDeleteModal()"
+                    class="flex items-center gap-2 rounded-lg bg-red-600 hover:bg-red-700 text-white px-4 py-2 text-sm font-bold transition-all">
+                <span class="material-symbols-outlined text-lg">delete</span>
+                <span>Delete</span>
+            </button>
+            <a href="/kos"
+               class="flex items-center gap-2 rounded-lg bg-gray-100 dark:bg-surface-highlight hover:bg-gray-200 dark:hover:bg-border-dark text-gray-700 dark:text-white px-4 py-2 text-sm font-medium transition-colors">
+                <span class="material-symbols-outlined text-lg">arrow_back</span>
+                <span>Back</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- KOS Details Card -->
+    <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-6">
+        <h2 class="flex items-center gap-2 text-xl font-semibold mb-6 text-gray-900 dark:text-white">
+            <span class="material-symbols-outlined text-primary">dns</span>
+            Instance Details
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Instance Name</p>
+                <p class="text-gray-900 dark:text-white font-medium">{{.KOS.Name}}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Status</p>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium
+                    {{if eq .KOS.Status "online"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
+                    {{else if eq .KOS.Status "registered"}}bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400
+                    {{else if eq .KOS.Status "provisioned"}}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400
+                    {{else if eq .KOS.Status "pending"}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400
+                    {{else if eq .KOS.Status "offline"}}bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400
+                    {{else if eq .KOS.Status "deactivated"}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400
+                    {{else}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400{{end}}">
+                    {{if eq .KOS.Status "online"}}<span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>{{end}}
+                    {{.KOS.Status}}
+                </span>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Site</p>
+                <p class="text-gray-900 dark:text-white">
+                    {{if .KOS.SiteName}}
+                    <a href="/sites/{{.KOS.SiteID}}" class="text-primary hover:text-primary/80 transition-colors">
+                        {{.KOS.SiteName}}
+                    </a>
+                    {{else}}<span class="text-gray-400">Not assigned</span>{{end}}
+                </p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Region</p>
+                <p class="text-gray-900 dark:text-white">
+                    {{if .KOS.RegionName}}{{.KOS.RegionName}}{{else}}<span class="text-gray-400">-</span>{{end}}
+                </p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Version</p>
+                <p class="text-gray-900 dark:text-white font-mono">
+                    {{if .KOS.Version}}{{.KOS.Version}}{{else}}<span class="text-gray-400">Not reported</span>{{end}}
+                </p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Last Heartbeat</p>
+                <p class="text-gray-900 dark:text-white">{{.KOS.LastHeartbeat}}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Registered At</p>
+                <p class="text-gray-900 dark:text-white">
+                    {{if .KOS.RegisteredAt}}{{.KOS.RegisteredAt}}{{else}}<span class="text-gray-400">Not yet registered</span>{{end}}
+                </p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Created</p>
+                <p class="text-gray-900 dark:text-white">{{.KOS.CreatedAt}}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Provisioning & Certificate Section -->
+    <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-6">
+        <div class="flex items-center justify-between mb-6">
+            <h2 class="flex items-center gap-2 text-xl font-semibold text-gray-900 dark:text-white">
+                <span class="material-symbols-outlined text-primary">security</span>
+                Provisioning & Certificates
+            </h2>
+        </div>
+
+        {{if eq .KOS.Status "pending"}}
+        <!-- Pending State - Show Download Bundle Button -->
+        <div class="text-center py-8 bg-gray-50 dark:bg-surface-highlight rounded-lg">
+            <span class="material-symbols-outlined text-5xl text-primary mb-4 block">cloud_download</span>
+            <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Ready for Provisioning</h3>
+            <p class="text-gray-500 dark:text-text-secondary mb-6 max-w-md mx-auto">
+                Download the provisioning bundle to configure the KOS instance. This will generate a certificate and provide all necessary configuration files.
+            </p>
+            <a href="/api/v1/kos-instances/{{.KOS.ID}}/provisioning-bundle"
+               class="inline-flex items-center gap-2 rounded-lg bg-primary hover:bg-primary/90 text-white px-6 py-3 text-sm font-bold transition-all shadow-[0_0_15px_rgba(110,86,207,0.3)]">
+                <span class="material-symbols-outlined text-lg">download</span>
+                <span>Download Provisioning Bundle</span>
+            </a>
+        </div>
+
+        {{else if .KOS.HasCertificate}}
+        <!-- Has Certificate - Show Certificate Info -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Certificate Serial</p>
+                <p class="text-gray-900 dark:text-white font-mono text-sm">
+                    {{if .KOS.CertificateSerial}}{{.KOS.CertificateSerial}}{{else}}<span class="text-gray-400">-</span>{{end}}
+                </p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 dark:text-text-secondary mb-1">Certificate Expiry</p>
+                <p class="text-gray-900 dark:text-white flex items-center gap-2">
+                    {{if .KOS.CertificateExpiry}}
+                    {{.KOS.CertificateExpiry}}
+                    {{if gt .KOS.CertExpiryDays 30}}
+                    <span class="text-green-600 dark:text-green-400 text-sm">({{.KOS.CertExpiryDays}} days)</span>
+                    {{else if gt .KOS.CertExpiryDays 0}}
+                    <span class="text-yellow-600 dark:text-yellow-400 text-sm">({{.KOS.CertExpiryDays}} days)</span>
+                    {{else}}
+                    <span class="text-red-600 dark:text-red-400 text-sm">(Expired)</span>
+                    {{end}}
+                    {{else}}<span class="text-gray-400">-</span>{{end}}
+                </p>
+            </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-200 dark:border-border-dark">
+            <button type="button" onclick="openRegenerateCertModal()"
+                    class="flex items-center justify-center gap-2 rounded-lg bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 text-sm font-bold transition-all">
+                <span class="material-symbols-outlined text-lg">autorenew</span>
+                <span>Regenerate Certificate</span>
+            </button>
+            <a href="/api/v1/kos-instances/{{.KOS.ID}}/provisioning-bundle"
+               class="flex items-center justify-center gap-2 rounded-lg bg-gray-100 dark:bg-surface-highlight hover:bg-gray-200 dark:hover:bg-border-dark text-gray-700 dark:text-white px-4 py-2 text-sm font-medium transition-colors">
+                <span class="material-symbols-outlined text-lg">download</span>
+                <span>Download Bundle</span>
+            </a>
+        </div>
+
+        {{else}}
+        <!-- No Certificate Yet - Deactivated state -->
+        <div class="text-center py-8 bg-gray-50 dark:bg-surface-highlight rounded-lg">
+            <span class="material-symbols-outlined text-5xl text-gray-400 mb-4 block">security</span>
+            <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">No Certificate</h3>
+            <p class="text-gray-500 dark:text-text-secondary max-w-md mx-auto">
+                This KOS instance does not have a certificate. Activate the instance to generate provisioning credentials.
+            </p>
+        </div>
+        {{end}}
+    </div>
+
+    <!-- Status Flow Guide -->
+    <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-6">
+        <h2 class="flex items-center gap-2 text-xl font-semibold mb-6 text-gray-900 dark:text-white">
+            <span class="material-symbols-outlined text-primary">timeline</span>
+            Status Flow
+        </h2>
+
+        <div class="flex flex-wrap items-center justify-center gap-2 text-sm">
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg {{if eq .KOS.Status "pending"}}bg-gray-200 dark:bg-gray-700 font-medium{{else}}bg-gray-100 dark:bg-surface-highlight text-gray-500{{end}}">
+                <span class="w-2 h-2 rounded-full {{if eq .KOS.Status "pending"}}bg-gray-600{{else}}bg-gray-400{{end}}"></span>
+                Pending
+            </div>
+            <span class="material-symbols-outlined text-gray-400">arrow_forward</span>
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg {{if eq .KOS.Status "provisioned"}}bg-yellow-100 dark:bg-yellow-900/30 font-medium{{else}}bg-gray-100 dark:bg-surface-highlight text-gray-500{{end}}">
+                <span class="w-2 h-2 rounded-full {{if eq .KOS.Status "provisioned"}}bg-yellow-500{{else}}bg-gray-400{{end}}"></span>
+                Provisioned
+            </div>
+            <span class="material-symbols-outlined text-gray-400">arrow_forward</span>
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg {{if eq .KOS.Status "registered"}}bg-blue-100 dark:bg-blue-900/30 font-medium{{else}}bg-gray-100 dark:bg-surface-highlight text-gray-500{{end}}">
+                <span class="w-2 h-2 rounded-full {{if eq .KOS.Status "registered"}}bg-blue-500{{else}}bg-gray-400{{end}}"></span>
+                Registered
+            </div>
+            <span class="material-symbols-outlined text-gray-400">arrow_forward</span>
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg {{if eq .KOS.Status "online"}}bg-green-100 dark:bg-green-900/30 font-medium{{else}}bg-gray-100 dark:bg-surface-highlight text-gray-500{{end}}">
+                <span class="w-2 h-2 rounded-full {{if eq .KOS.Status "online"}}bg-green-500 animate-pulse{{else}}bg-gray-400{{end}}"></span>
+                Online
+            </div>
+        </div>
+
+        <div class="mt-4 text-xs text-gray-500 dark:text-text-secondary text-center">
+            {{if eq .KOS.Status "pending"}}Download provisioning bundle to generate certificate{{end}}
+            {{if eq .KOS.Status "provisioned"}}Configure KOS with bundle, then KOS will register{{end}}
+            {{if eq .KOS.Status "registered"}}KOS has registered, awaiting first heartbeat{{end}}
+            {{if eq .KOS.Status "online"}}KOS is online and sending heartbeats{{end}}
+            {{if eq .KOS.Status "offline"}}KOS has not sent a heartbeat recently{{end}}
+            {{if eq .KOS.Status "deactivated"}}KOS is deactivated - activate to re-provision{{end}}
+        </div>
     </div>
 </div>
-{{end}}
 
-{{define "scripts"}}{{end}}
+<!-- Deactivate Confirmation Modal -->
+<div id="deactivate-modal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeDeactivateModal()"></div>
+        <div class="relative bg-white dark:bg-surface-dark rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Deactivate KOS Instance</h3>
+            <p class="text-gray-600 dark:text-gray-300 mb-4">
+                Are you sure you want to deactivate <strong>{{.KOS.Name}}</strong>?
+            </p>
+            <div class="p-3 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-400 text-sm mb-6">
+                <span class="material-symbols-outlined text-sm align-middle mr-1">warning</span>
+                The KOS instance will need to be re-provisioned after activation.
+            </div>
+            <div class="flex gap-3 justify-end">
+                <button type="button" onclick="closeDeactivateModal()"
+                        class="px-4 py-2 rounded-lg bg-gray-100 dark:bg-surface-highlight hover:bg-gray-200 dark:hover:bg-border-dark text-gray-700 dark:text-white text-sm font-medium transition-colors">
+                    Cancel
+                </button>
+                <button type="button" onclick="deactivateKOS()"
+                        class="px-4 py-2 rounded-lg bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-bold transition-colors">
+                    Deactivate
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Regenerate Certificate Modal -->
+<div id="regenerate-cert-modal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeRegenerateCertModal()"></div>
+        <div class="relative bg-white dark:bg-surface-dark rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Regenerate Certificate</h3>
+            <p class="text-gray-600 dark:text-gray-300 mb-4">
+                Are you sure you want to regenerate the certificate for <strong>{{.KOS.Name}}</strong>?
+            </p>
+            <div class="p-3 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-400 text-sm mb-6">
+                <span class="material-symbols-outlined text-sm align-middle mr-1">warning</span>
+                The current certificate will be invalidated. You will need to download the new provisioning bundle and reconfigure the KOS instance.
+            </div>
+            <div class="flex gap-3 justify-end">
+                <button type="button" onclick="closeRegenerateCertModal()"
+                        class="px-4 py-2 rounded-lg bg-gray-100 dark:bg-surface-highlight hover:bg-gray-200 dark:hover:bg-border-dark text-gray-700 dark:text-white text-sm font-medium transition-colors">
+                    Cancel
+                </button>
+                <button type="button" onclick="regenerateCert()"
+                        class="px-4 py-2 rounded-lg bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-bold transition-colors">
+                    Regenerate
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="delete-modal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeDeleteModal()"></div>
+        <div class="relative bg-white dark:bg-surface-dark rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Delete KOS Instance</h3>
+            <p class="text-gray-600 dark:text-gray-300 mb-6">
+                Are you sure you want to delete <strong>{{.KOS.Name}}</strong>? This action cannot be undone.
+            </p>
+            {{if and (ne .KOS.Status "pending") (ne .KOS.Status "deactivated")}}
+            <div class="p-3 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-400 text-sm mb-6">
+                <span class="material-symbols-outlined text-sm align-middle mr-1">warning</span>
+                KOS instance must be deactivated before deletion.
+            </div>
+            {{end}}
+            <div class="flex gap-3 justify-end">
+                <button type="button" onclick="closeDeleteModal()"
+                        class="px-4 py-2 rounded-lg bg-gray-100 dark:bg-surface-highlight hover:bg-gray-200 dark:hover:bg-border-dark text-gray-700 dark:text-white text-sm font-medium transition-colors">
+                    Cancel
+                </button>
+                {{if or (eq .KOS.Status "pending") (eq .KOS.Status "deactivated")}}
+                <button type="button" onclick="deleteKOS()"
+                        class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition-colors">
+                    Delete
+                </button>
+                {{end}}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openDeactivateModal() {
+    document.getElementById('deactivate-modal').classList.remove('hidden');
+}
+
+function closeDeactivateModal() {
+    document.getElementById('deactivate-modal').classList.add('hidden');
+}
+
+function openRegenerateCertModal() {
+    document.getElementById('regenerate-cert-modal').classList.remove('hidden');
+}
+
+function closeRegenerateCertModal() {
+    document.getElementById('regenerate-cert-modal').classList.add('hidden');
+}
+
+function openDeleteModal() {
+    document.getElementById('delete-modal').classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    document.getElementById('delete-modal').classList.add('hidden');
+}
+
+function deactivateKOS() {
+    fetch('/api/v1/kos-instances/{{.KOS.ID}}/deactivate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => {
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            return response.json().then(data => {
+                alert(data.error?.message || 'Failed to deactivate KOS instance');
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to deactivate KOS instance');
+    });
+}
+
+function activateKOS() {
+    fetch('/api/v1/kos-instances/{{.KOS.ID}}/activate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => {
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            return response.json().then(data => {
+                alert(data.error?.message || 'Failed to activate KOS instance');
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to activate KOS instance');
+    });
+}
+
+function regenerateCert() {
+    fetch('/api/v1/kos-instances/{{.KOS.ID}}/regenerate-certificate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => {
+        if (response.ok) {
+            closeRegenerateCertModal();
+            window.location.reload();
+        } else {
+            return response.json().then(data => {
+                alert(data.error?.message || 'Failed to regenerate certificate');
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to regenerate certificate');
+    });
+}
+
+function deleteKOS() {
+    fetch('/api/v1/kos-instances/{{.KOS.ID}}', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => {
+        if (response.ok) {
+            window.location.href = '/kos';
+        } else {
+            return response.json().then(data => {
+                alert(data.error?.message || 'Failed to delete KOS instance');
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to delete KOS instance');
+    });
+}
+
+// Close modals on escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeDeactivateModal();
+        closeRegenerateCertModal();
+        closeDeleteModal();
+    }
+});
+</script>
+{{end}}

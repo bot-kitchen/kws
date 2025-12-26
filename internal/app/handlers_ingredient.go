@@ -12,13 +12,13 @@ import (
 // ==================== Ingredient handlers ====================
 
 type CreateIngredientRequest struct {
-	TenantID         string         `json:"tenant_id" form:"tenant_id" binding:"required"`
-	Name             string         `json:"name" form:"name" binding:"required"`
-	MoistureType     string         `json:"moisture_type" form:"moisture_type" binding:"required,oneof=dry wet liquid"`
-	ShelfLifeHours   int            `json:"shelf_life_hours" form:"shelf_life_hours"`
-	AllergenInfo     string         `json:"allergen_info" form:"allergen_info"`
-	Parameters       map[string]any `json:"parameters"`
-	IsActive         string         `json:"is_active" form:"is_active"`
+	TenantID       string         `json:"tenant_id" form:"tenant_id" binding:"required"`
+	Name           string         `json:"name" form:"name" binding:"required"`
+	MoistureType   string         `json:"moisture_type" form:"moisture_type" binding:"required,oneof=dry wet liquid"`
+	ShelfLifeHours int            `json:"shelf_life_hours" form:"shelf_life_hours"`
+	AllergenInfo   string         `json:"allergen_info" form:"allergen_info"`
+	Parameters     map[string]any `json:"parameters"`
+	IsActive       string         `json:"is_active" form:"is_active"`
 	// Nutrition fields (per 100g)
 	CaloriesPer100g float64 `json:"calories_per_100g" form:"calories_per_100g"`
 	ProteinPer100g  float64 `json:"protein_per_100g" form:"protein_per_100g"`

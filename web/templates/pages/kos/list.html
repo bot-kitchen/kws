@@ -134,9 +134,6 @@
     </div>
 </div>
 
-{{end}}
-
-{{define "scripts"}}
 <script>
 function openCreateModal() {
     window.location.href = '/kos/new';
@@ -147,18 +144,11 @@ function openEditModal(id) {
 }
 
 function provisionKOS(id) {
-    if (confirm('Provision certificates for this KOS instance?')) {
-        htmx.ajax('POST', '/api/v1/kos/' + id + '/provision', {
-            swap: 'none'
-        }).then(response => {
-            showToast('success', 'KOS provisioned successfully');
-            window.location.reload();
-        });
-    }
+    window.location.href = '/api/v1/kos-instances/' + id + '/provisioning-bundle';
 }
 
 function downloadCerts(id) {
-    window.location.href = '/api/v1/kos/' + id + '/certificates';
+    window.location.href = '/api/v1/kos-instances/' + id + '/provisioning-bundle';
 }
 </script>
 {{end}}

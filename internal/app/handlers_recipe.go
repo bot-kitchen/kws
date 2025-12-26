@@ -13,8 +13,8 @@ import (
 // ==================== Recipe handlers ====================
 
 type CreateRecipeRequest struct {
-	TenantID string `json:"tenant_id"` // Optional in request, validated against session
-	Name     string `json:"name" binding:"required"`
+	TenantID                string                    `json:"tenant_id"` // Optional in request, validated against session
+	Name                    string                    `json:"name" binding:"required"`
 	Description             string                    `json:"description"`
 	Category                string                    `json:"category"`
 	PrepTime                int                       `json:"prep_time"`

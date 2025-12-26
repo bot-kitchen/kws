@@ -117,10 +117,10 @@ func (r *recipeRepository) GetPublishedForSite(ctx context.Context, siteID primi
 	query := bson.M{
 		"status": models.RecipeStatusPublished,
 		"$or": []bson.M{
-			{"published_to_sites": siteID},                  // site-specific
-			{"published_to_sites": bson.M{"$size": 0}},      // global (empty array)
+			{"published_to_sites": siteID},                   // site-specific
+			{"published_to_sites": bson.M{"$size": 0}},       // global (empty array)
 			{"published_to_sites": bson.M{"$exists": false}}, // global (null/missing)
-			{"published_to_sites": nil},                     // global (explicit null)
+			{"published_to_sites": nil},                      // global (explicit null)
 		},
 	}
 
