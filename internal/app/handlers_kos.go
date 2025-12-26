@@ -296,7 +296,7 @@ func (a *Application) getKOSProvisioningBundle(c *gin.Context) {
 		KOSID:          instance.ID.Hex(),
 		TenantID:       instance.TenantID.Hex(),
 		SiteID:         instance.SiteID.Hex(),
-		KWSEndpoint:    a.config.Server.ExternalURL,
+		KWSEndpoint:    a.config.Server.ExternalURL + "/api/v1",
 		Certificate:    instance.CertificatePEM,
 		PrivateKey:     instance.PrivateKeyPEM,
 		CACertificate:  a.config.Certificate.CACert,
