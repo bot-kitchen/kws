@@ -122,34 +122,34 @@
             </tbody>
         </table>
 
-        <!-- Pagination -->
-        {{if gt .TotalPages 1}}
+        <!-- Pagination (only shown when TotalPages > 1) -->
+        {{with .TotalPages}}{{if gt . 1}}
         <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
             <div class="text-sm text-gray-500">
-                Showing {{.StartIndex}} to {{.EndIndex}} of {{.Total}} tenants
+                Showing {{$.StartIndex}} to {{$.EndIndex}} of {{$.Total}} tenants
             </div>
             <div class="flex items-center space-x-2">
-                {{if gt .Page 1}}
-                <a href="?page={{sub .Page 1}}"
+                {{if gt $.Page 1}}
+                <a href="?page={{sub $.Page 1}}"
                    class="px-3 py-1 rounded border border-gray-300 dark:border-gray-600 text-sm hover:bg-gray-50 dark:hover:bg-gray-700">
                     Previous
                 </a>
                 {{end}}
-                {{range .Pages}}
+                {{range $.Pages}}
                 <a href="?page={{.}}"
                    class="px-3 py-1 rounded text-sm {{if eq . $.Page}}bg-primary-600 text-white{{else}}border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700{{end}}">
                     {{.}}
                 </a>
                 {{end}}
-                {{if lt .Page .TotalPages}}
-                <a href="?page={{add .Page 1}}"
+                {{if lt $.Page $.TotalPages}}
+                <a href="?page={{add $.Page 1}}"
                    class="px-3 py-1 rounded border border-gray-300 dark:border-gray-600 text-sm hover:bg-gray-50 dark:hover:bg-gray-700">
                     Next
                 </a>
                 {{end}}
             </div>
         </div>
-        {{end}}
+        {{end}}{{end}}
     </div>
 </div>
 

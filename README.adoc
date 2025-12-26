@@ -1,0 +1,379 @@
+= KWS (Kitchen Web Service)
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+
+== Overview
+
+KWS is a B2B cloud platform for managing multiple KOS (Kitchen Operating System) instances across different tenants, regions, and sites. It provides centralized recipe management, order routing, and fleet management for autonomous kitchen operations.
+
+== Quick Start
+
+=== Prerequisites
+
+* Go 1.25+
+* Docker and Docker Compose v2
+* MongoDB 8.0+ (runs in Docker)
+* Keycloak 26+ (runs in Docker)
+
+=== Clone and Setup
+
+[source,bash]
+----
+cd ~/src/ak/kws
+
+# Copy production config for local development
+cp config/config.prod.yaml config/config.yaml
+
+# Edit config.yaml for local development (optional)
+# - Change port if needed
+# - Enable debug mode
+----
+
+=== Start Dependencies (MongoDB, Keycloak)
+
+[source,bash]
+----
+# Start MongoDB and Keycloak containers
+docker compose up -d mongodb postgres keycloak
+
+# Wait for services to be ready (about 30 seconds)
+docker compose logs -f keycloak  # Wait until you see "Keycloak ... started"
+# Press Ctrl+C to exit logs
+----
+
+=== Verify Dependencies
+
+[source,bash]
+----
+# Check MongoDB is running
+docker compose exec mongodb mongosh --eval "db.runCommand({ping:1})"
+
+# Check Keycloak is running
+curl -s http://localhost:8180/health/ready
+
+# Access Keycloak Admin Console
+# URL: http://localhost:8180
+# Username: admin
+# Password: admin (or $KEYCLOAK_ADMIN_PASSWORD)
+----
+
+=== Build and Run KWS
+
+[source,bash]
+----
+# Build the application
+make build
+
+# Run the server (uses config/config.yaml)
+make run
+
+# Or run directly
+./bin/kws serve
+----
+
+=== Access KWS
+
+* **Web UI**: http://localhost:7000 (or port configured in config.yaml)
+* **API**: http://localhost:7000/api/v1/
+
+== Configuration
+
+=== Configuration Files
+
+|===
+|File |Purpose |Git Status
+
+|`config/config.prod.yaml`
+|Production defaults, committed to git
+|Tracked
+
+|`config/config.yaml`
+|Local development, secrets allowed
+|Gitignored
+
+|`config/config.local.yaml`
+|Additional local overrides
+|Gitignored
+|===
+
+=== Environment Variable Overrides
+
+All config values can be overridden via environment variables with `KWS_` prefix:
+
+[source,bash]
+----
+export KWS_SERVER_PORT=8080
+export KWS_MONGODB_URI=mongodb://production-host:27017
+export KWS_KEYCLOAK_URL=https://auth.example.com
+----
+
+=== Key Configuration Options
+
+[source,yaml]
+----
+# config/config.yaml
+app:
+  env: development  # development, staging, production
+  debug: true       # Enable debug logging
+
+server:
+  port: 7000        # HTTP server port
+
+mongodb:
+  uri: mongodb://localhost:27017
+  database: kws
+
+keycloak:
+  url: http://localhost:8180
+  admin_username: admin
+  admin_password: admin  # Use env var in production!
+----
+
+== Docker Compose Services
+
+|===
+|Service |Port |Description
+
+|`kws`
+|8000:8080
+|KWS Application (only when running full stack)
+
+|`mongodb`
+|27017:27017
+|MongoDB for application data
+
+|`postgres`
+|5432 (internal)
+|PostgreSQL for Keycloak
+
+|`keycloak`
+|8180:8080
+|IAM (Authentication & Authorization)
+
+|`nginx`
+|443, 8443
+|Reverse proxy (production profile only)
+|===
+
+=== Common Docker Commands
+
+[source,bash]
+----
+# Start only dependencies (for local development)
+docker compose up -d mongodb postgres keycloak
+
+# Start everything including KWS container
+docker compose up -d
+
+# View logs
+docker compose logs -f kws
+docker compose logs -f keycloak
+
+# Stop all services
+docker compose down
+
+# Stop and remove volumes (full reset)
+docker compose down -v
+
+# Rebuild KWS container after code changes
+docker compose build kws
+docker compose up -d kws
+----
+
+== Development Workflow
+
+=== Daily Development
+
+[source,bash]
+----
+# 1. Start dependencies
+docker compose up -d mongodb postgres keycloak
+
+# 2. Build and run locally (faster iteration)
+make run
+
+# 3. Make changes, rebuild
+make run
+----
+
+=== API Testing
+
+[source,bash]
+----
+# Health check
+curl http://localhost:7000/health
+
+# List tenants (requires auth in production)
+curl http://localhost:7000/api/v1/tenants
+
+# Create a tenant
+curl -X POST http://localhost:7000/api/v1/tenants \
+  -H "Content-Type: application/json" \
+  -d '{"code": "test-tenant", "name": "Test Tenant", "plan": "starter"}'
+----
+
+== Project Structure
+
+[source]
+----
+kws/
+├── cmd/kws/              # Application entry point
+├── config/               # Configuration files
+│   ├── config.prod.yaml  # Production defaults (committed)
+│   └── config.yaml       # Local development (gitignored)
+├── docker-compose.yaml   # Docker services
+├── Dockerfile            # Container build
+├── docs/                 # Documentation (AsciiDoc)
+│   ├── KWS-Requirements-Document.adoc
+│   ├── KWS-Functional-Specification.adoc
+│   └── KWS-Technical-Design.adoc
+├── internal/
+│   ├── app/              # HTTP handlers, middleware
+│   ├── domain/           # Models, repositories, services
+│   ├── infrastructure/   # Config, database, external services
+│   └── pkg/              # Shared utilities
+├── scripts/
+│   ├── ca/               # Certificate Authority scripts
+│   └── db/               # Database initialization
+└── web/                  # Web UI (templates, static files)
+----
+
+== KOS Integration
+
+KWS manages KOS instances via REST API with mTLS authentication.
+
+=== KOS Authentication Flow
+
+1. KOS instance is provisioned with mTLS client certificate
+2. On first startup, KOS generates a UUID and stores it in local database
+3. KOS connects to KWS with:
+   - mTLS client certificate (transport layer)
+   - `X-KOS-ID` header with UUID
+
+=== KOS Endpoints
+
+|===
+|Endpoint |Method |Description
+
+|`/api/v1/kos/register`
+|POST
+|Register new KOS instance
+
+|`/api/v1/kos/heartbeat`
+|POST
+|Health check (every 60s)
+
+|`/api/v1/kos/recipes`
+|GET
+|Get recipes assigned to this KOS
+
+|`/api/v1/kos/ingredients`
+|GET
+|Get ingredients for assigned recipes
+
+|`/api/v1/kos/orders`
+|GET
+|Get pending orders for this site
+
+|`/api/v1/kos/orders/:id/status`
+|POST
+|Update order status
+
+|`/api/v1/kos/orders/local`
+|POST
+|Report locally-created order
+|===
+
+== Troubleshooting
+
+=== MongoDB Connection Issues
+
+[source,bash]
+----
+# Check if MongoDB container is running
+docker compose ps mongodb
+
+# Check MongoDB logs
+docker compose logs mongodb
+
+# Test connection
+docker compose exec mongodb mongosh --eval "db.runCommand({ping:1})"
+----
+
+=== Keycloak Issues
+
+[source,bash]
+----
+# Keycloak takes ~30s to start fully
+docker compose logs -f keycloak
+
+# Check health endpoint
+curl http://localhost:8180/health/ready
+
+# Reset Keycloak (loses all data)
+docker compose down keycloak postgres
+docker volume rm kws_postgres-data
+docker compose up -d postgres keycloak
+----
+
+=== Template Errors
+
+If you see template errors like "invalid value; expected int":
+
+1. Check the handler is passing correct data types
+2. Ensure pagination fields (Page, TotalPages) are integers
+3. Use `{{with .Field}}` to handle nil values
+
+=== Port Conflicts
+
+[source,bash]
+----
+# Check what's using a port
+lsof -i :7000
+lsof -i :27017
+
+# Change KWS port in config/config.yaml
+# Change MongoDB port in docker-compose.yaml
+----
+
+== Makefile Targets
+
+|===
+|Target |Description
+
+|`make`
+|Format and build (default)
+
+|`make build`
+|Build the binary
+
+|`make run`
+|Build and run server
+
+|`make fmt`
+|Format Go code
+
+|`make test`
+|Run tests
+
+|`make tidy`
+|Run go mod tidy
+
+|`make clean`
+|Remove build artifacts
+
+|`make up`
+|Start Docker Compose services
+
+|`make down`
+|Stop Docker Compose services
+|===
+
+== Related Documentation
+
+* link:docs/KWS-Requirements-Document.adoc[Requirements Document] - System requirements and SOPs
+* link:docs/KWS-Functional-Specification.adoc[Functional Specification] - User features and workflows
+* link:docs/KWS-Technical-Design.adoc[Technical Design] - Architecture and schemas
+* link:CLAUDE.md[CLAUDE.md] - AI assistant context and coding guidelines

@@ -341,9 +341,9 @@ func (w *WebHandlers) Orders(c *gin.Context) {
 			"Failed":     3,
 		},
 		"Orders": []gin.H{
-			{"ID": "1", "OrderReference": "ORD-2024-001234", "CustomerName": "John Doe", "SiteName": "SF Downtown", "RegionName": "US West", "Items": []string{"1", "2", "3"}, "Status": "completed", "Priority": 3, "CreatedAt": "5 min ago"},
-			{"ID": "2", "OrderReference": "ORD-2024-001235", "CustomerName": "Jane Smith", "SiteName": "NYC Midtown", "RegionName": "US East", "Items": []string{"1", "2"}, "Status": "in_progress", "Priority": 2, "CreatedAt": "8 min ago"},
-			{"ID": "3", "OrderReference": "ORD-2024-001236", "SiteName": "LA Venice", "RegionName": "US West", "Items": []string{"1", "2", "3", "4", "5"}, "Status": "pending", "Priority": 5, "CreatedAt": "12 min ago"},
+			{"ID": "1", "OrderReference": "ORD-2024-001234", "CustomerName": "John Doe", "SiteName": "SF Downtown", "RegionName": "US West", "RecipeName": "Classic Burger", "Status": "completed", "Priority": 3, "CreatedAt": "5 min ago"},
+			{"ID": "2", "OrderReference": "ORD-2024-001235", "CustomerName": "Jane Smith", "SiteName": "NYC Midtown", "RegionName": "US East", "RecipeName": "Caesar Salad", "Status": "in_progress", "Priority": 2, "CreatedAt": "8 min ago"},
+			{"ID": "3", "OrderReference": "ORD-2024-001236", "SiteName": "LA Venice", "RegionName": "US West", "RecipeName": "Chocolate Lava Cake", "Status": "pending", "Priority": 1, "CreatedAt": "12 min ago"},
 		},
 		"Sites": []gin.H{
 			{"ID": "1", "Name": "SF Downtown"},
