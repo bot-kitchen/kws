@@ -867,17 +867,18 @@ func (w *WebHandlers) RecipeNew(c *gin.Context) {
 	ctx := c.Request.Context()
 	tenantIDStr := middleware.GetEffectiveTenantID(c)
 
+	// Get ingredients for selector (use snake_case for JS compatibility)
 	ingredientData := []gin.H{}
 
 	if tenantIDStr != "" {
 		tenantID, err := primitive.ObjectIDFromHex(tenantIDStr)
 		if err == nil {
-			ingredients, _, _ := w.handlers.repos.Ingredient.ListByTenant(ctx, tenantID, false, 1, 500)
+			ingredients, _, _ := w.handlers.repos.Ingredient.ListByTenant(ctx, tenantID, true, 1, 500) // Only active ingredients
 			for _, i := range ingredients {
 				ingredientData = append(ingredientData, gin.H{
-					"ID":           i.ID.Hex(),
-					"Name":         i.Name,
-					"MoistureType": i.MoistureType,
+					"id":            i.ID.Hex(),
+					"name":          i.Name,
+					"moisture_type": i.MoistureType,
 				})
 			}
 		}
@@ -974,17 +975,17 @@ func (w *WebHandlers) RecipeEdit(c *gin.Context) {
 		})
 	}
 
-	// Get ingredients for selector
+	// Get ingredients for selector (use snake_case for JS compatibility)
 	ingredientData := []gin.H{}
 	if tenantIDStr != "" {
 		tenantID, err := primitive.ObjectIDFromHex(tenantIDStr)
 		if err == nil {
-			ingredients, _, _ := w.handlers.repos.Ingredient.ListByTenant(ctx, tenantID, false, 1, 500)
+			ingredients, _, _ := w.handlers.repos.Ingredient.ListByTenant(ctx, tenantID, true, 1, 500) // Only active ingredients
 			for _, i := range ingredients {
 				ingredientData = append(ingredientData, gin.H{
-					"ID":           i.ID.Hex(),
-					"Name":         i.Name,
-					"MoistureType": i.MoistureType,
+					"id":            i.ID.Hex(),
+					"name":          i.Name,
+					"moisture_type": i.MoistureType,
 				})
 			}
 		}

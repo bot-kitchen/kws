@@ -458,7 +458,7 @@ function addIngredientGroup() {
 // Update ingredient across all steps in a group
 function updateIngredientGroupIngredient(groupId, ingredientId, quantity) {
     const groupSteps = steps.filter(s => s.ingredientGroupId === groupId);
-    const ingredient = (window.existingIngredients || []).find(i => i.id === ingredientId);
+    const ingredient = (window.existingIngredients || []).find(i => String(i.id) === String(ingredientId));
     groupSteps.forEach(step => {
         step.parameters.ingredient_id = ingredientId;
         if (ingredient) {
@@ -626,8 +626,8 @@ function updateGroupedStepFromCard(step, card) {
         // Ingredient selector is on pick step
         const ingredientSelect = card.querySelector('.ingredient-select-group');
         if (ingredientSelect && ingredientSelect.value) {
-            const ingredientId = parseInt(ingredientSelect.value);
-            const ingredient = (window.existingIngredients || []).find(i => i.id === ingredientId);
+            const ingredientId = ingredientSelect.value; // Keep as string for MongoDB ObjectID
+            const ingredient = (window.existingIngredients || []).find(i => String(i.id) === String(ingredientId));
             step.parameters.ingredient_id = ingredientId;
             if (ingredient) {
                 step.parameters.ingredient_name = ingredient.name;
@@ -649,13 +649,13 @@ function buildParameters(action, card) {
     switch (action) {
         case 'add_liquid': {
             const selectEl = card.querySelector('.ingredient-select-liquid');
-            const ingredientId = parseInt(selectEl?.value || 0);
+            const ingredientId = selectEl?.value || ''; // Keep as string for MongoDB ObjectID
             const ingredientName = selectEl?.selectedOptions[0]?.text || '';
             const params = {
                 quantity: parseFloat(card.querySelector('.param-add-liquid .quantity-input')?.value || 0),
                 metric: 'ml'
             };
-            if (ingredientId > 0) {
+            if (ingredientId) {
                 params.ingredient_id = ingredientId;
                 params.ingredient_name = ingredientName;
             }
@@ -663,13 +663,13 @@ function buildParameters(action, card) {
         }
         case 'add_solid': {
             const selectEl = card.querySelector('.ingredient-select-solid');
-            const ingredientId = parseInt(selectEl?.value || 0);
+            const ingredientId = selectEl?.value || ''; // Keep as string for MongoDB ObjectID
             const ingredientName = selectEl?.selectedOptions[0]?.text || '';
             const params = {
                 quantity: parseFloat(card.querySelector('.param-add-solid .quantity-input')?.value || 0),
                 metric: 'grams'
             };
-            if (ingredientId > 0) {
+            if (ingredientId) {
                 params.ingredient_id = ingredientId;
                 params.ingredient_name = ingredientName;
             }
@@ -687,15 +687,15 @@ function buildParameters(action, card) {
                 direction: card.querySelector('.direction-radio:checked')?.value || 'scraping'
             };
         case 'pick_ingredient': {
-            const ingredientId = parseInt(card.querySelector('.ingredient-select-pick')?.value || 0);
+            const ingredientId = card.querySelector('.ingredient-select-pick')?.value || '';
             const params = {};
-            if (ingredientId > 0) params.ingredient_id = ingredientId;
+            if (ingredientId) params.ingredient_id = ingredientId;
             return params;
         }
         case 'place_ingredient': {
-            const ingredientId = parseInt(card.querySelector('.ingredient-select-place')?.value || 0);
+            const ingredientId = card.querySelector('.ingredient-select-place')?.value || '';
             const params = {};
-            if (ingredientId > 0) params.ingredient_id = ingredientId;
+            if (ingredientId) params.ingredient_id = ingredientId;
             return params;
         }
         default:
@@ -873,7 +873,7 @@ function createStepCard(step, index) {
                             </label>
                             <select class="ingredient-select-group w-full">
                                 <option value="">Select ingredient...</option>
-                                ${solidIngredients.map(ing => `<option value="${ing.id}" ${parseInt(step.parameters.ingredient_id) === ing.id ? 'selected' : ''}>${ing.name}</option>`).join('')}
+                                ${solidIngredients.map(ing => `<option value="${ing.id}" ${String(step.parameters.ingredient_id) === String(ing.id) ? 'selected' : ''}>${ing.name}</option>`).join('')}
                             </select>
                         </div>
                         <!-- Dependencies for pick step -->
@@ -1006,7 +1006,7 @@ function createStepCard(step, index) {
                         </label>
                         <select class="ingredient-select-liquid w-full mb-4">
                             <option value="">Select ingredient...</option>
-                            ${liquidIngredients.map(ing => `<option value="${ing.id}" ${parseInt(step.parameters.ingredient_id) === ing.id ? 'selected' : ''}>${ing.name}</option>`).join('')}
+                            ${liquidIngredients.map(ing => `<option value="${ing.id}" ${String(step.parameters.ingredient_id) === String(ing.id) ? 'selected' : ''}>${ing.name}</option>`).join('')}
                         </select>
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             Quantity (ml) <span class="text-red-500">*</span>
@@ -1127,7 +1127,7 @@ function createStepCard(step, index) {
         const ingredientSelect = card.querySelector('.ingredient-select-group');
         if (ingredientSelect) {
             ingredientSelect.addEventListener('change', (e) => {
-                const ingredientId = parseInt(e.target.value) || null;
+                const ingredientId = e.target.value || null; // Keep as string for MongoDB ObjectID
                 updateIngredientGroupIngredient(step.ingredientGroupId, ingredientId);
                 // Clear field error
                 ingredientSelect.classList.remove('border-red-500', 'dark:border-red-500');
@@ -1263,7 +1263,7 @@ function createStepCard(step, index) {
 function getIngredientName(ingredientId) {
     if (!ingredientId) return null;
     const ingredients = window.existingIngredients || [];
-    const ing = ingredients.find(i => i.id === parseInt(ingredientId, 10));
+    const ing = ingredients.find(i => String(i.id) === String(ingredientId));
     return ing ? ing.name : null;
 }
 

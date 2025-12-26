@@ -126,7 +126,17 @@ func (r *ingredientRepository) GetByIDs(ctx context.Context, ids []primitive.Obj
 }
 
 func (r *ingredientRepository) CountRecipesUsingIngredient(ctx context.Context, ingredientID primitive.ObjectID) (int64, error) {
-	// Count recipes that have this ingredient in their ingredients array
-	query := bson.M{"ingredients.ingredient_id": ingredientID}
+	// Count non-archived recipes that use this ingredient in either:
+	// 1. The ingredients array (RecipeIngredient items)
+	// 2. The steps array (ingredient_id in step parameters, stored as string)
+	// Archived recipes don't count - ingredient can be hard deleted if only archived recipes use it
+	ingredientIDStr := ingredientID.Hex()
+	query := bson.M{
+		"status": bson.M{"$ne": "archived"},
+		"$or": []bson.M{
+			{"ingredients.ingredient_id": ingredientID},
+			{"steps.parameters.ingredient_id": ingredientIDStr},
+		},
+	}
 	return r.recipesCollection.CountDocuments(ctx, query)
 }

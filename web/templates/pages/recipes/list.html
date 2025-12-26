@@ -225,16 +225,22 @@ function closeDeleteModal() {
     document.getElementById('delete-modal').classList.add('hidden');
 }
 
-function confirmDelete() {
+async function confirmDelete() {
     const id = document.getElementById('delete-recipe-id').value;
-    fetch('/api/v1/recipes/' + id, { method: 'DELETE' })
-        .then(response => {
-            if (response.ok) {
-                window.location.reload();
-            } else {
-                alert('Failed to delete recipe');
-            }
-        });
+    try {
+        const response = await fetch('/api/v1/recipes/' + id, { method: 'DELETE' });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const data = await response.json();
+            const errorMsg = data.error?.message || data.error || 'Failed to delete recipe';
+            alert(errorMsg);
+        }
+    } catch (error) {
+        console.error('Error deleting recipe:', error);
+        alert('Failed to delete recipe: ' + error.message);
+    }
+    closeDeleteModal();
 }
 
 async function cloneRecipe(id, name) {
