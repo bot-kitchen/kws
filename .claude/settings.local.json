@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sed:*)",
+      "Bash(cat:*)",
+      "Bash(make:*)",
+      "Bash(go build:*)",
+      "Bash(mysql:*)",
+      "Bash(curl:*)",
+      "Bash(go vet:*)",
+      "Bash(kill:*)",
+      "Bash(pgrep:*)",
+      "Bash(pkill:*)",
+      "Bash(lsof:*)",
+      "Bash(find:*)",
+      "Bash(python3:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(flutter analyze:*)",
+      "Bash(flutter build:*)",
+      "Bash(go test:*)",
+      "Bash(node --check:*)",
+      "Bash(timeout:*)",
+      "Bash(bun:*)",
+      "Bash(echo:*)",
+      "Bash(bun run build:*)",
+      "Bash(go get:*)",
+      "Bash(go mod tidy:*)",
+      "Bash(bash:*)",
+      "Bash(tail:*)",
+      "Bash(supervisorctl:*)"
+    ],
+    "deny": [],
+    "ask": [],
+    "defaultMode": "plan"
+  }
+}
