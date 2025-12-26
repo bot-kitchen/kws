@@ -7,6 +7,9 @@ import (
 )
 
 // Ingredient represents a cooking ingredient
+// Aligned with KOS ingredient table: Name, MoistureType, ShelfLifeMinutes, AllergenInfo,
+// Nutrition fields (CaloriesPer100g, ProteinPer100g, etc.), Parameters
+// KWS-specific fields: TenantID, IsActive
 type Ingredient struct {
 	ID               primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	TenantID         primitive.ObjectID `bson:"tenant_id" json:"tenant_id"`
@@ -40,6 +43,9 @@ type NutritionInfo struct {
 }
 
 // Recipe represents a cooking recipe
+// Core fields aligned with KOS recipe table: Name, EstimatedPrepTimeSec, EstimatedCookingTimeSec,
+// AllergenWarnings, Version, and IsActive (mapped to Status == published)
+// KWS-specific fields: TenantID, Description, Category, CuisineType, PrepTime, CookTime, Servings, etc.
 type Recipe struct {
 	ID                      primitive.ObjectID   `bson:"_id,omitempty" json:"id"`
 	TenantID                primitive.ObjectID   `bson:"tenant_id" json:"tenant_id"`
@@ -77,10 +83,10 @@ const (
 )
 
 // RecipeIngredient represents an ingredient requirement in a recipe
+// Aligned with KOS recipe_ingredient table
 type RecipeIngredient struct {
 	IngredientID     primitive.ObjectID   `bson:"ingredient_id" json:"ingredient_id"`
 	IngredientName   string               `bson:"ingredient_name" json:"ingredient_name"` // Denormalized for display
-	Quantity         float64              `bson:"quantity" json:"quantity"`
 	QuantityRequired float64              `bson:"quantity_required" json:"quantity_required"`
 	Unit             string               `bson:"unit" json:"unit"` // grams, ml
 	PrepNotes        string               `bson:"prep_notes,omitempty" json:"prep_notes,omitempty"`
@@ -90,17 +96,15 @@ type RecipeIngredient struct {
 }
 
 // RecipeStep represents a step in recipe execution
+// Aligned with KOS recipe_step table
 type RecipeStep struct {
-	Order          int            `bson:"order" json:"order"`
-	StepNumber     int            `bson:"step_number" json:"step_number"`
-	Name           string         `bson:"name" json:"name"`
-	Action         string         `bson:"action" json:"action"` // prep, cook, add_ingredient, add_liquid, stir, grind, wait
-	Description    string         `bson:"description,omitempty" json:"description,omitempty"`
-	Duration       int            `bson:"duration" json:"duration"` // in seconds
-	DeviceType     string         `bson:"device_type,omitempty" json:"device_type,omitempty"`
-	Parameters     map[string]any `bson:"parameters,omitempty" json:"parameters,omitempty"`
-	DependsOnSteps []int          `bson:"depends_on_steps,omitempty" json:"depends_on_steps,omitempty"`
-	DurationSec    int            `bson:"duration_sec,omitempty" json:"duration_sec,omitempty"`
+	StepNumber     int            `bson:"step_number" json:"step_number"`                         // Sequential order (1,2,3...)
+	Action         string         `bson:"action" json:"action"`                                   // add_liquid, add_solids, agitate, etc.
+	Name           string         `bson:"name,omitempty" json:"name,omitempty"`                   // Human-readable name (KWS-only)
+	Description    string         `bson:"description,omitempty" json:"description,omitempty"`     // Step description (KWS-only)
+	DeviceType     string         `bson:"device_type,omitempty" json:"device_type,omitempty"`     // Device type hint (KWS-only)
+	Parameters     map[string]any `bson:"parameters,omitempty" json:"parameters,omitempty"`       // temperature, duration, etc.
+	DependsOnSteps []int          `bson:"depends_on_steps,omitempty" json:"depends_on_steps,omitempty"` // Parent steps for dependency
 }
 
 // RecipeSyncRecord tracks recipe sync status to KOS instances

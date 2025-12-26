@@ -25,19 +25,22 @@ type CreateRecipeRequest struct {
 }
 
 type RecipeStepRequest struct {
-	Order       int            `json:"order"`
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Duration    int            `json:"duration"`
-	DeviceType  string         `json:"device_type"`
-	Parameters  map[string]any `json:"parameters"`
+	StepNumber     int            `json:"step_number"`        // Sequential order (1,2,3...)
+	Action         string         `json:"action"`             // add_liquid, add_solids, etc.
+	Name           string         `json:"name,omitempty"`     // Human-readable name
+	Description    string         `json:"description,omitempty"`
+	DeviceType     string         `json:"device_type,omitempty"`
+	Parameters     map[string]any `json:"parameters,omitempty"`
+	DependsOnSteps []int          `json:"depends_on_steps,omitempty"`
 }
 
 type RecipeIngredientRequest struct {
-	IngredientID string  `json:"ingredient_id" binding:"required"`
-	Quantity     float64 `json:"quantity"`
-	Unit         string  `json:"unit"`
-	PrepNotes    string  `json:"prep_notes"`
+	IngredientID     string  `json:"ingredient_id" binding:"required"`
+	QuantityRequired float64 `json:"quantity_required"` // Required quantity per serving
+	Unit             string  `json:"unit"`              // grams, ml
+	TimingStep       int     `json:"timing_step"`       // Recipe step when added
+	IsCritical       bool    `json:"is_critical"`       // Recipe fails without this
+	PrepNotes        string  `json:"prep_notes,omitempty"`
 }
 
 type UpdateRecipeRequest struct {
@@ -98,12 +101,13 @@ func (a *Application) createRecipe(c *gin.Context) {
 	steps := make([]models.RecipeStep, len(req.Steps))
 	for i, s := range req.Steps {
 		steps[i] = models.RecipeStep{
-			Order:       s.Order,
-			Name:        s.Name,
-			Description: s.Description,
-			Duration:    s.Duration,
-			DeviceType:  s.DeviceType,
-			Parameters:  s.Parameters,
+			StepNumber:     s.StepNumber,
+			Action:         s.Action,
+			Name:           s.Name,
+			Description:    s.Description,
+			DeviceType:     s.DeviceType,
+			Parameters:     s.Parameters,
+			DependsOnSteps: s.DependsOnSteps,
 		}
 	}
 
@@ -116,10 +120,12 @@ func (a *Application) createRecipe(c *gin.Context) {
 			return
 		}
 		ingredients[i] = models.RecipeIngredient{
-			IngredientID: ingID,
-			Quantity:     ing.Quantity,
-			Unit:         ing.Unit,
-			PrepNotes:    ing.PrepNotes,
+			IngredientID:     ingID,
+			QuantityRequired: ing.QuantityRequired,
+			Unit:             ing.Unit,
+			TimingStep:       ing.TimingStep,
+			IsCritical:       ing.IsCritical,
+			PrepNotes:        ing.PrepNotes,
 		}
 	}
 
@@ -215,12 +221,13 @@ func (a *Application) updateRecipe(c *gin.Context) {
 		steps := make([]models.RecipeStep, len(req.Steps))
 		for i, s := range req.Steps {
 			steps[i] = models.RecipeStep{
-				Order:       s.Order,
-				Name:        s.Name,
-				Description: s.Description,
-				Duration:    s.Duration,
-				DeviceType:  s.DeviceType,
-				Parameters:  s.Parameters,
+				StepNumber:     s.StepNumber,
+				Action:         s.Action,
+				Name:           s.Name,
+				Description:    s.Description,
+				DeviceType:     s.DeviceType,
+				Parameters:     s.Parameters,
+				DependsOnSteps: s.DependsOnSteps,
 			}
 		}
 		recipe.Steps = steps
@@ -236,10 +243,12 @@ func (a *Application) updateRecipe(c *gin.Context) {
 				return
 			}
 			ingredients[i] = models.RecipeIngredient{
-				IngredientID: ingID,
-				Quantity:     ing.Quantity,
-				Unit:         ing.Unit,
-				PrepNotes:    ing.PrepNotes,
+				IngredientID:     ingID,
+				QuantityRequired: ing.QuantityRequired,
+				Unit:             ing.Unit,
+				TimingStep:       ing.TimingStep,
+				IsCritical:       ing.IsCritical,
+				PrepNotes:        ing.PrepNotes,
 			}
 		}
 		recipe.Ingredients = ingredients

@@ -357,7 +357,7 @@ erDiagram
     kos_instances {
         ObjectId _id PK
         string instance_id UK
-        ObjectId site_ref FK UK
+        ObjectId site_ref FK
         string device_id UK
         string api_key_prefix UK
         string api_key_hash

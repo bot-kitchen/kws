@@ -8,6 +8,9 @@ import (
 )
 
 // Order represents a customer order (single recipe per order for capacity-based scheduling)
+// Core fields aligned with KOS order table: OrderReference (order_id), CustomerName, RecipeID,
+// PotPercentage, Priority, Status, KitchenID, SpecialInstructions
+// KWS-specific fields: TenantID, RegionID, SiteID, Source, KOSSyncStatus, Modifications, etc.
 type Order struct {
 	ID             primitive.ObjectID  `bson:"_id,omitempty" json:"id"`
 	TenantID       primitive.ObjectID  `bson:"tenant_id" json:"tenant_id"`
