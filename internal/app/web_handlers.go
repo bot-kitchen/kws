@@ -1651,7 +1651,7 @@ func (w *WebHandlers) OrderDetail(c *gin.Context) {
 		"CurrentPage": "orders",
 		"Order": gin.H{
 			"ID":                  order.ID.Hex(),
-			"OrderID":             order.OrderReference,
+			"OrderReference":      order.OrderReference,
 			"RecipeID":            order.RecipeID.Hex(),
 			"RecipeName":          order.RecipeName,
 			"SiteID":              order.SiteID.Hex(),
