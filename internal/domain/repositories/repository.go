@@ -102,6 +102,10 @@ type OrderRepository interface {
 	Update(ctx context.Context, order *models.Order) error
 	ListByTenant(ctx context.Context, tenantID primitive.ObjectID, siteID *primitive.ObjectID, status string, page, limit int) ([]*models.Order, int64, error)
 	GetPendingForSite(ctx context.Context, siteID primitive.ObjectID) ([]*models.Order, error)
+	// GetActiveForSite returns orders that are in non-terminal states (accepted, scheduled, in_progress)
+	GetActiveForSite(ctx context.Context, siteID primitive.ObjectID) ([]*models.Order, error)
+	// ResetOrphanedOrders resets orders to pending that KOS no longer has
+	ResetOrphanedOrders(ctx context.Context, siteID primitive.ObjectID, activeOrderIDs []string) (int64, error)
 }
 
 type OrderFilter struct {

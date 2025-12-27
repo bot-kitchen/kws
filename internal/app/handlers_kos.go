@@ -459,11 +459,12 @@ type KOSRegisterRequest struct {
 }
 
 type KOSHeartbeatRequest struct {
-	KOSID       string         `json:"kos_id" binding:"required"`
-	Status      string         `json:"status" binding:"required"`
-	Version     string         `json:"version"`
-	Metrics     map[string]any `json:"metrics"`
-	ActiveTasks int            `json:"active_tasks"`
+	KOSID        string         `json:"kos_id" binding:"required"`
+	Status       string         `json:"status" binding:"required"`
+	Version      string         `json:"version"`
+	Metrics      map[string]any `json:"metrics"`
+	ActiveTasks  int            `json:"active_tasks"`
+	ActiveOrders []string       `json:"active_orders"` // KWS order IDs currently active on this KOS
 }
 
 type KOSOrderStatusRequest struct {
@@ -565,7 +566,16 @@ func (a *Application) kosHeartbeat(c *gin.Context) {
 		return
 	}
 
-	successResponse(c, gin.H{"acknowledged": true})
+	// Order reconciliation: reset orphaned orders that KOS no longer has
+	// This handles cases where KOS lost its database (e.g., drop_db_on_start)
+	resetCount, err := a.repos.Order.ResetOrphanedOrders(c.Request.Context(), instance.SiteID, req.ActiveOrders)
+	if err != nil {
+		a.logger.Warn("Failed to reset orphaned orders")
+	} else if resetCount > 0 {
+		a.logger.Info("Reset orphaned orders to pending")
+	}
+
+	successResponse(c, gin.H{"acknowledged": true, "orders_reset": resetCount})
 }
 
 func (a *Application) kosGetRecipes(c *gin.Context) {

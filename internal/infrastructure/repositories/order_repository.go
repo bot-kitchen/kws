@@ -188,3 +188,81 @@ func (r *orderRepository) GetByKOSOrderID(ctx context.Context, kosOrderID string
 	}
 	return &order, nil
 }
+
+// GetActiveForSite returns orders that are in non-terminal states (accepted, scheduled, in_progress)
+// These are orders that KOS should have in its local database
+func (r *orderRepository) GetActiveForSite(ctx context.Context, siteID primitive.ObjectID) ([]*models.Order, error) {
+	query := bson.M{
+		"site_id": siteID,
+		"status": bson.M{
+			"$in": []models.OrderStatus{
+				models.OrderStatusAccepted,
+				models.OrderStatusScheduled,
+				models.OrderStatusInProgress,
+			},
+		},
+	}
+
+	opts := options.Find().
+		SetSort(bson.D{{Key: "created_at", Value: 1}})
+
+	cursor, err := r.collection.Find(ctx, query, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var orders []*models.Order
+	if err := cursor.All(ctx, &orders); err != nil {
+		return nil, err
+	}
+
+	return orders, nil
+}
+
+// ResetOrphanedOrders resets orders to pending status if they are not in the activeOrderIDs list
+// This is used when KOS reports its active orders via heartbeat and some orders are missing
+// (e.g., after KOS database reset)
+func (r *orderRepository) ResetOrphanedOrders(ctx context.Context, siteID primitive.ObjectID, activeOrderIDs []string) (int64, error) {
+	// Convert string IDs to ObjectIDs
+	var activeOIDs []primitive.ObjectID
+	for _, idStr := range activeOrderIDs {
+		if oid, err := primitive.ObjectIDFromHex(idStr); err == nil {
+			activeOIDs = append(activeOIDs, oid)
+		}
+	}
+
+	// Find orders that are active in KWS but not reported by KOS
+	query := bson.M{
+		"site_id": siteID,
+		"status": bson.M{
+			"$in": []models.OrderStatus{
+				models.OrderStatusAccepted,
+				models.OrderStatusScheduled,
+				models.OrderStatusInProgress,
+			},
+		},
+	}
+
+	// If KOS reports some active orders, exclude them from reset
+	if len(activeOIDs) > 0 {
+		query["_id"] = bson.M{"$nin": activeOIDs}
+	}
+
+	// Reset to pending status
+	update := bson.M{
+		"$set": bson.M{
+			"status":          models.OrderStatusPending,
+			"kos_sync_status": models.KOSSyncStatusPending,
+			"kos_order_id":    "",
+			"updated_at":      time.Now(),
+		},
+	}
+
+	result, err := r.collection.UpdateMany(ctx, query, update)
+	if err != nil {
+		return 0, err
+	}
+
+	return result.ModifiedCount, nil
+}
