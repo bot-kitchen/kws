@@ -36,7 +36,9 @@
       "Bash(timeout 5 make:*)",
       "Bash(make clean:*)",
       "Bash(docker exec:*)",
-      "Bash(docker ps:*)"
+      "Bash(docker ps:*)",
+      "Bash(sudo mysql:*)",
+      "Bash(mariadb:*)"
     ],
     "deny": [],
     "ask": [],

@@ -44,6 +44,10 @@ type Order struct {
 	CreatedBy           string         `bson:"created_by,omitempty" json:"created_by,omitempty"`
 	CreatedAt           time.Time      `bson:"created_at" json:"created_at"`
 	UpdatedAt           time.Time      `bson:"updated_at" json:"updated_at"`
+
+	// Task and equipment info synced from KOS
+	Tasks     []OrderTask     `bson:"tasks,omitempty" json:"tasks,omitempty"`
+	Equipment *OrderEquipment `bson:"equipment,omitempty" json:"equipment,omitempty"`
 }
 
 // OrderItem is used for API requests when creating multiple orders at once
@@ -62,6 +66,39 @@ type Modification struct {
 	Type       string `bson:"type" json:"type"`             // exclude, substitute, extra
 	Ingredient string `bson:"ingredient" json:"ingredient"` // Ingredient name
 	Notes      string `bson:"notes,omitempty" json:"notes,omitempty"`
+}
+
+// OrderTask represents a task synced from KOS (L4 task)
+type OrderTask struct {
+	TaskID          string     `bson:"task_id" json:"task_id"`                                       // e.g., "order_123|step_1"
+	StepNumber      int        `bson:"step_number" json:"step_number"`                               // Sequential step number
+	Action          string     `bson:"action" json:"action"`                                         // L4 action name
+	Status          string     `bson:"status" json:"status"`                                         // pending, ready, running, completed, failed, blocked
+	Parameters      string     `bson:"parameters,omitempty" json:"parameters,omitempty"`             // JSON string
+	DependsOnTasks  []string   `bson:"depends_on_tasks,omitempty" json:"depends_on_tasks,omitempty"` // Task IDs this depends on
+	ActualStartTime *time.Time `bson:"actual_start_time,omitempty" json:"actual_start_time,omitempty"`
+	ActualEndTime   *time.Time `bson:"actual_end_time,omitempty" json:"actual_end_time,omitempty"`
+	ErrorMessage    string     `bson:"error_message,omitempty" json:"error_message,omitempty"`
+	ErrorCode       string     `bson:"error_code,omitempty" json:"error_code,omitempty"`
+	L2Tasks         []L2Task   `bson:"l2_tasks,omitempty" json:"l2_tasks,omitempty"` // L2 subtasks
+}
+
+// L2Task represents a subtask within an L4 task
+type L2Task struct {
+	L4TaskID        string            `bson:"l4_task_id" json:"l4_task_id"`
+	L4Action        string            `bson:"l4_action" json:"l4_action"`
+	L2Action        string            `bson:"l2_action" json:"l2_action"`
+	DeviceTypes     []string          `bson:"device_types,omitempty" json:"device_types,omitempty"`
+	SelectedDevices map[string]string `bson:"selected_devices,omitempty" json:"selected_devices,omitempty"`
+	IsCompleted     bool              `bson:"is_completed" json:"is_completed"`
+	IsInProgress    bool              `bson:"is_in_progress" json:"is_in_progress"`
+}
+
+// OrderEquipment represents equipment info reported from KOS
+type OrderEquipment struct {
+	KitchenName string   `bson:"kitchen_name,omitempty" json:"kitchen_name,omitempty"`
+	Pots        []string `bson:"pots,omitempty" json:"pots,omitempty"` // Pot IDs
+	PyroID      string   `bson:"pyro_id,omitempty" json:"pyro_id,omitempty"`
 }
 
 type OrderStatus string

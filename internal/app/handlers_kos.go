@@ -467,12 +467,47 @@ type KOSHeartbeatRequest struct {
 	ActiveOrders []string       `json:"active_orders"` // KWS order IDs currently active on this KOS
 }
 
+// L2TaskReport represents an L2 subtask reported from KOS
+type L2TaskReport struct {
+	L4TaskID        string            `json:"l4_task_id"`
+	L4Action        string            `json:"l4_action"`
+	L2Action        string            `json:"l2_action"`
+	DeviceTypes     []string          `json:"device_types"`
+	SelectedDevices map[string]string `json:"selected_devices"`
+	IsCompleted     bool              `json:"is_completed"`
+	IsInProgress    bool              `json:"is_in_progress"`
+}
+
+// TaskReport represents an L4 task reported from KOS
+type TaskReport struct {
+	TaskID          string         `json:"task_id"`
+	StepNumber      int            `json:"step_number"`
+	Action          string         `json:"action"`
+	Status          string         `json:"status"`
+	Parameters      string         `json:"parameters"`
+	DependsOnTasks  []string       `json:"depends_on_tasks"`
+	ActualStartTime *time.Time     `json:"actual_start_time"`
+	ActualEndTime   *time.Time     `json:"actual_end_time"`
+	ErrorMessage    string         `json:"error_message"`
+	ErrorCode       string         `json:"error_code"`
+	L2Tasks         []L2TaskReport `json:"l2_tasks"`
+}
+
+// EquipmentReport represents equipment info from KOS
+type EquipmentReport struct {
+	KitchenName string   `json:"kitchen_name"`
+	Pots        []string `json:"pots"`
+	PyroID      string   `json:"pyro_id"`
+}
+
 type KOSOrderStatusRequest struct {
-	Status      string     `json:"status" binding:"required"`
-	KOSOrderID  string     `json:"kos_order_id"`
-	StartedAt   *time.Time `json:"started_at"`
-	CompletedAt *time.Time `json:"completed_at"`
-	ErrorMsg    string     `json:"error_msg"`
+	Status      string           `json:"status" binding:"required"`
+	KOSOrderID  string           `json:"kos_order_id"`
+	StartedAt   *time.Time       `json:"started_at"`
+	CompletedAt *time.Time       `json:"completed_at"`
+	ErrorMsg    string           `json:"error_msg"`
+	Tasks       []TaskReport     `json:"tasks"`     // All tasks with L2 subtasks
+	Equipment   *EquipmentReport `json:"equipment"` // Kitchen, pots, pyro
 }
 
 func (a *Application) kosRegister(c *gin.Context) {
@@ -725,6 +760,49 @@ func (a *Application) kosUpdateOrderStatus(c *gin.Context) {
 	}
 	if req.ErrorMsg != "" {
 		order.ErrorMessage = req.ErrorMsg
+	}
+
+	// Convert and store tasks from KOS
+	if len(req.Tasks) > 0 {
+		order.Tasks = make([]models.OrderTask, len(req.Tasks))
+		for i, t := range req.Tasks {
+			// Convert L2 tasks
+			l2Tasks := make([]models.L2Task, len(t.L2Tasks))
+			for j, l2 := range t.L2Tasks {
+				l2Tasks[j] = models.L2Task{
+					L4TaskID:        l2.L4TaskID,
+					L4Action:        l2.L4Action,
+					L2Action:        l2.L2Action,
+					DeviceTypes:     l2.DeviceTypes,
+					SelectedDevices: l2.SelectedDevices,
+					IsCompleted:     l2.IsCompleted,
+					IsInProgress:    l2.IsInProgress,
+				}
+			}
+
+			order.Tasks[i] = models.OrderTask{
+				TaskID:          t.TaskID,
+				StepNumber:      t.StepNumber,
+				Action:          t.Action,
+				Status:          t.Status,
+				Parameters:      t.Parameters,
+				DependsOnTasks:  t.DependsOnTasks,
+				ActualStartTime: t.ActualStartTime,
+				ActualEndTime:   t.ActualEndTime,
+				ErrorMessage:    t.ErrorMessage,
+				ErrorCode:       t.ErrorCode,
+				L2Tasks:         l2Tasks,
+			}
+		}
+	}
+
+	// Convert and store equipment info from KOS
+	if req.Equipment != nil {
+		order.Equipment = &models.OrderEquipment{
+			KitchenName: req.Equipment.KitchenName,
+			Pots:        req.Equipment.Pots,
+			PyroID:      req.Equipment.PyroID,
+		}
 	}
 
 	now := time.Now()

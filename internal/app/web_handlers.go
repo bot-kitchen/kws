@@ -1647,6 +1647,12 @@ func (w *WebHandlers) OrderDetail(c *gin.Context) {
 		return
 	}
 
+	// Get site name for display
+	siteName := ""
+	if site, err := w.handlers.repos.Site.GetByID(ctx, order.SiteID); err == nil && site != nil {
+		siteName = site.Name
+	}
+
 	data := gin.H{
 		"CurrentPage": "orders",
 		"Order": gin.H{
@@ -1655,6 +1661,7 @@ func (w *WebHandlers) OrderDetail(c *gin.Context) {
 			"RecipeID":            order.RecipeID.Hex(),
 			"RecipeName":          order.RecipeName,
 			"SiteID":              order.SiteID.Hex(),
+			"SiteName":            siteName,
 			"CustomerName":        order.CustomerName,
 			"Status":              order.Status,
 			"Priority":            order.Priority,
@@ -1662,7 +1669,11 @@ func (w *WebHandlers) OrderDetail(c *gin.Context) {
 			"SpecialInstructions": order.SpecialInstructions,
 			"CreatedAt":           order.CreatedAt,
 			"UpdatedAt":           order.UpdatedAt,
+			"StartedAt":           order.StartedAt,
+			"CompletedAt":         order.CompletedAt,
 		},
+		"Tasks":     order.Tasks,
+		"Equipment": order.Equipment,
 	}
 	w.renderTemplate(c, "orders-view", data)
 }

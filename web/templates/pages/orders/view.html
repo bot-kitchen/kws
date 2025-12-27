@@ -1,141 +1,555 @@
 {{define "orders-view"}}
-<div class="max-w-4xl mx-auto space-y-6">
-    <!-- Page Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-        <div>
-            <div class="flex items-center gap-3 mb-2">
-                <h1 class="text-3xl md:text-4xl font-bold tracking-tight font-mono" title="{{.Order.OrderReference}}">{{.Order.ID}}</h1>
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                    {{if eq .Order.Status "completed"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
-                    {{else if eq .Order.Status "in_progress"}}bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400
-                    {{else if eq .Order.Status "failed"}}bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400
-                    {{else if eq .Order.Status "cancelled"}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400
-                    {{else}}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400{{end}}">
-                    {{if eq .Order.Status "in_progress"}}cooking{{else}}{{.Order.Status}}{{end}}
-                </span>
-            </div>
-            <p class="text-gray-500 dark:text-text-secondary text-sm md:text-base flex items-center gap-2">
+<div class="max-w-6xl mx-auto">
+    <!-- Back Button -->
+    <div class="mb-6">
+        <a href="/orders" class="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-primary transition-colors">
+            <span class="material-symbols-outlined">arrow_back</span>
+            <span>Back to Orders</span>
+        </a>
+    </div>
+
+    <!-- Order Header Card - Compact -->
+    <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-4 mb-4">
+        <!-- Row 1: Order ID, Customer, Status -->
+        <div class="flex items-center justify-between gap-3 mb-3">
+            <div class="flex items-center gap-3 min-w-0">
+                <h1 class="text-lg font-bold text-gray-900 dark:text-white truncate" title="{{.Order.OrderReference}}">
+                    {{.Order.ID}}
+                </h1>
                 {{if .Order.CustomerName}}
-                <span class="material-symbols-outlined text-sm">person</span>
-                {{.Order.CustomerName}}
-                <span class="text-gray-300 dark:text-gray-600">|</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400">{{.Order.CustomerName}}</span>
                 {{end}}
-                <span class="material-symbols-outlined text-sm">restaurant</span>
-                {{.Order.RecipeName}}
-            </p>
+            </div>
+            <span class="px-2 py-1 text-xs font-semibold rounded-lg flex-shrink-0
+                {{if eq .Order.Status "completed"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
+                {{else if eq .Order.Status "in_progress"}}bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400
+                {{else if eq .Order.Status "failed"}}bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400
+                {{else if eq .Order.Status "cancelled"}}bg-gray-100 dark:bg-gray-900/30 text-gray-700 dark:text-gray-400
+                {{else}}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400{{end}}">
+                {{if eq .Order.Status "in_progress"}}cooking{{else}}{{.Order.Status}}{{end}}
+            </span>
         </div>
-        <div class="flex items-center gap-2">
-            {{if eq .Order.Status "pending"}}
-            <button type="button" onclick="cancelOrder()"
-                    class="flex items-center gap-2 rounded-lg bg-red-600 hover:bg-red-700 text-white px-4 py-2 text-sm font-bold transition-all">
-                <span class="material-symbols-outlined text-lg">cancel</span>
-                <span>Cancel</span>
-            </button>
+
+        <!-- Row 2: Details inline with pipe separators -->
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600 dark:text-gray-400">
+            {{if .Order.RecipeName}}
+            <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-primary" style="font-size: 14px;">restaurant</span>
+                <span class="font-medium text-gray-900 dark:text-white">{{.Order.RecipeName}}</span>
+            </span>
             {{end}}
-            <a href="/orders"
-               class="flex items-center gap-2 rounded-lg bg-gray-100 dark:bg-surface-highlight hover:bg-gray-200 dark:hover:bg-border-dark text-gray-700 dark:text-white px-4 py-2 text-sm font-medium transition-colors">
-                <span class="material-symbols-outlined text-lg">arrow_back</span>
-                <span>Back</span>
-            </a>
+            {{if .Order.PotPercentage}}
+            {{if .Order.RecipeName}}<span class="text-gray-400 dark:text-gray-600">|</span>{{end}}
+            <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-primary" style="font-size: 14px;">pie_chart</span>
+                <span class="font-medium text-gray-900 dark:text-white">{{.Order.PotPercentage}}%</span>
+            </span>
+            {{end}}
+            {{if .Order.Priority}}
+            {{if or .Order.RecipeName .Order.PotPercentage}}<span class="text-gray-400 dark:text-gray-600">|</span>{{end}}
+            <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-primary" style="font-size: 14px;">flag</span>
+                <span class="font-medium text-gray-900 dark:text-white">{{.Order.Priority}}</span>
+            </span>
+            {{end}}
+            {{if .Order.SiteName}}
+            {{if or .Order.RecipeName .Order.PotPercentage .Order.Priority}}<span class="text-gray-400 dark:text-gray-600">|</span>{{end}}
+            <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-primary" style="font-size: 14px;">location_on</span>
+                <span class="font-medium text-gray-900 dark:text-white">{{.Order.SiteName}}</span>
+            </span>
+            {{end}}
+            {{if .Equipment}}
+            {{if .Equipment.KitchenName}}
+            {{if or .Order.RecipeName .Order.PotPercentage .Order.Priority .Order.SiteName}}<span class="text-gray-400 dark:text-gray-600">|</span>{{end}}
+            <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-primary" style="font-size: 14px;">countertops</span>
+                <span class="font-medium text-gray-900 dark:text-white">{{.Equipment.KitchenName}}</span>
+            </span>
+            {{end}}
+            {{if .Equipment.Pots}}
+            {{if or .Order.RecipeName .Order.PotPercentage .Order.Priority .Order.SiteName .Equipment.KitchenName}}<span class="text-gray-400 dark:text-gray-600">|</span>{{end}}
+            <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-primary" style="font-size: 14px;">soup_kitchen</span>
+                <span class="font-medium text-gray-900 dark:text-white">{{range $i, $pot := .Equipment.Pots}}{{if $i}}, {{end}}{{$pot}}{{end}}</span>
+            </span>
+            {{end}}
+            {{if .Equipment.PyroID}}
+            {{if or .Order.RecipeName .Order.PotPercentage .Order.Priority .Order.SiteName .Equipment.KitchenName .Equipment.Pots}}<span class="text-gray-400 dark:text-gray-600">|</span>{{end}}
+            <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-primary" style="font-size: 14px;">local_fire_department</span>
+                <span class="font-medium text-gray-900 dark:text-white">{{.Equipment.PyroID}}</span>
+            </span>
+            {{end}}
+            {{end}}
         </div>
-    </div>
 
-    <!-- Order Details Card -->
-    <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-6">
-        <h2 class="flex items-center gap-2 text-xl font-semibold mb-6 text-gray-900 dark:text-white">
-            <span class="material-symbols-outlined text-primary">receipt_long</span>
-            Order Details
-        </h2>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="space-y-4">
-                <div class="flex justify-between items-center py-2 border-b border-gray-100 dark:border-border-dark">
-                    <span class="text-gray-500 dark:text-text-secondary">Order Reference</span>
-                    <span class="font-medium text-gray-900 dark:text-white">{{.Order.OrderID}}</span>
-                </div>
-                {{if .Order.CustomerName}}
-                <div class="flex justify-between items-center py-2 border-b border-gray-100 dark:border-border-dark">
-                    <span class="text-gray-500 dark:text-text-secondary">Customer</span>
-                    <span class="font-medium text-gray-900 dark:text-white">{{.Order.CustomerName}}</span>
-                </div>
-                {{end}}
-                <div class="flex justify-between items-center py-2 border-b border-gray-100 dark:border-border-dark">
-                    <span class="text-gray-500 dark:text-text-secondary">Recipe</span>
-                    <span class="font-medium text-gray-900 dark:text-white">{{.Order.RecipeName}}</span>
-                </div>
-                <div class="flex justify-between items-center py-2 border-b border-gray-100 dark:border-border-dark">
-                    <span class="text-gray-500 dark:text-text-secondary">Status</span>
-                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
-                        {{if eq .Order.Status "completed"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
-                        {{else if eq .Order.Status "in_progress"}}bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400
-                        {{else if eq .Order.Status "failed"}}bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400
-                        {{else if eq .Order.Status "cancelled"}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400
-                        {{else}}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400{{end}}">
-                        {{if eq .Order.Status "in_progress"}}cooking{{else}}{{.Order.Status}}{{end}}
-                    </span>
-                </div>
+        <!-- Progress Bar - Compact -->
+        {{$tasks := .Tasks}}
+        {{$totalTasks := len $tasks}}
+        {{if gt $totalTasks 0}}
+        {{$successTasks := 0}}
+        {{range $tasks}}
+            {{if eq .Status "completed"}}{{$successTasks = add $successTasks 1}}{{end}}
+        {{end}}
+        <div class="mt-3 flex items-center gap-3">
+            <div class="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
+                <div id="order-progress-bar" class="bg-gradient-to-r from-primary to-blue-500 h-1.5 rounded-full transition-all duration-300"
+                     data-completed="{{$successTasks}}" data-total="{{$totalTasks}}" style="width: 0%"></div>
             </div>
-            <div class="space-y-4">
-                {{if .Order.Priority}}
-                <div class="flex justify-between items-center py-2 border-b border-gray-100 dark:border-border-dark">
-                    <span class="text-gray-500 dark:text-text-secondary">Priority</span>
-                    <span class="font-medium text-gray-900 dark:text-white">
-                        {{if eq .Order.Priority 1}}Urgent
-                        {{else if le .Order.Priority 3}}High
-                        {{else}}Normal{{end}}
-                    </span>
-                </div>
-                {{end}}
-                {{if .Order.PotPercentage}}
-                <div class="flex justify-between items-center py-2 border-b border-gray-100 dark:border-border-dark">
-                    <span class="text-gray-500 dark:text-text-secondary">Pot Percentage</span>
-                    <span class="font-medium text-gray-900 dark:text-white">{{.Order.PotPercentage}}%</span>
-                </div>
-                {{end}}
-                <div class="flex justify-between items-center py-2 border-b border-gray-100 dark:border-border-dark">
-                    <span class="text-gray-500 dark:text-text-secondary">Created</span>
-                    <span class="font-medium text-gray-900 dark:text-white">{{formatTime .Order.CreatedAt}}</span>
-                </div>
-                <div class="flex justify-between items-center py-2 border-b border-gray-100 dark:border-border-dark">
-                    <span class="text-gray-500 dark:text-text-secondary">Updated</span>
-                    <span class="font-medium text-gray-900 dark:text-white">{{formatTime .Order.UpdatedAt}}</span>
-                </div>
-            </div>
+            <span class="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">{{$successTasks}}/{{$totalTasks}}</span>
         </div>
+        {{end}}
     </div>
 
-    {{if .Order.SpecialInstructions}}
-    <!-- Special Instructions Card -->
-    <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-6">
-        <h2 class="flex items-center gap-2 text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-            <span class="material-symbols-outlined text-primary">notes</span>
-            Special Instructions
-        </h2>
-        <p class="text-gray-700 dark:text-gray-300">{{.Order.SpecialInstructions}}</p>
-    </div>
+    <!-- Task Overview Card -->
+    {{$tasks := .Tasks}}
+    {{$completedCount := 0}}
+    {{$runningCount := 0}}
+    {{$pendingCount := 0}}
+    {{$failedCount := 0}}
+    {{$blockedCount := 0}}
+    {{range $tasks}}
+        {{if eq .Status "completed"}}{{$completedCount = add $completedCount 1}}{{end}}
+        {{if or (eq .Status "running") (eq .Status "in_progress")}}{{$runningCount = add $runningCount 1}}{{end}}
+        {{if or (eq .Status "pending") (eq .Status "ready")}}{{$pendingCount = add $pendingCount 1}}{{end}}
+        {{if eq .Status "failed"}}{{$failedCount = add $failedCount 1}}{{end}}
+        {{if eq .Status "blocked"}}{{$blockedCount = add $blockedCount 1}}{{end}}
     {{end}}
+
+    <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Task Overview</h2>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-4">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                        <span class="material-symbols-outlined text-blue-600 dark:text-blue-400">schedule</span>
+                    </div>
+                    <div>
+                        <p class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{$pendingCount}}</p>
+                        <p class="text-xs text-gray-500 dark:text-text-secondary">Pending</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-4">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                        <span class="material-symbols-outlined text-orange-600 dark:text-orange-400">sync</span>
+                    </div>
+                    <div>
+                        <p class="text-2xl font-bold text-orange-600 dark:text-orange-400">{{$runningCount}}</p>
+                        <p class="text-xs text-gray-500 dark:text-text-secondary">In Progress</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-4">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                        <span class="material-symbols-outlined text-amber-600 dark:text-amber-400">hourglass_empty</span>
+                    </div>
+                    <div>
+                        <p class="text-2xl font-bold text-amber-600 dark:text-amber-400">{{$blockedCount}}</p>
+                        <p class="text-xs text-gray-500 dark:text-text-secondary">Blocked</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-4">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                        <span class="material-symbols-outlined text-green-600 dark:text-green-400">check_circle</span>
+                    </div>
+                    <div>
+                        <p class="text-2xl font-bold text-green-600 dark:text-green-400">{{$completedCount}}</p>
+                        <p class="text-xs text-gray-500 dark:text-text-secondary">Completed</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-surface-dark border border-gray-200 dark:border-border-dark rounded-xl p-4">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                        <span class="material-symbols-outlined text-red-600 dark:text-red-400">error</span>
+                    </div>
+                    <div>
+                        <p class="text-2xl font-bold text-red-600 dark:text-red-400">{{$failedCount}}</p>
+                        <p class="text-xs text-gray-500 dark:text-text-secondary">Failed</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tasks List -->
+    <div class="space-y-2">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">Tasks</h2>
+
+        {{range $idx, $task := $tasks}}
+        <div class="task-card bg-white dark:bg-surface-dark border
+            {{if or (eq $task.Status "running") (eq $task.Status "in_progress")}}border-2 border-primary
+            {{else if eq $task.Status "blocked"}}border-2 border-amber-400 dark:border-amber-600
+            {{else}}border-gray-200 dark:border-border-dark{{end}}
+            rounded-xl overflow-hidden transition-all" data-task-id="{{$task.TaskID}}">
+
+            <!-- Task Content - Compact -->
+            <div class="p-3" data-task-id="{{$task.TaskID}}">
+                <div class="flex gap-3 items-start">
+                    <!-- Step Number Badge - Smaller -->
+                    {{if $task.StepNumber}}
+                    <div class="flex-shrink-0">
+                        <div class="w-7 h-7 rounded-full flex items-center justify-center font-bold text-white text-xs
+                            {{if eq $task.Status "completed"}}bg-green-500
+                            {{else if or (eq $task.Status "running") (eq $task.Status "in_progress")}}bg-orange-500
+                            {{else if eq $task.Status "blocked"}}bg-amber-500
+                            {{else if eq $task.Status "failed"}}bg-red-500
+                            {{else}}bg-blue-500{{end}}">
+                            {{$task.StepNumber}}
+                        </div>
+                    </div>
+                    {{end}}
+
+                    <!-- Task Info - Main content area -->
+                    <div class="flex-1 min-w-0">
+                        <!-- Row 1: Task name + L2 subtasks on same line -->
+                        <div class="flex items-center gap-3 flex-wrap">
+                            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                                {{$task.Action | printf "%s" | replace "_" " " | title}}
+                            </h3>
+                            <!-- L2 Subtasks inline with title -->
+                            <div id="l2-tasks-{{$idx}}" data-task-id="{{$task.TaskID}}" class="flex items-center gap-1 text-xs"></div>
+                        </div>
+
+                        <!-- Row 2: Dependencies, Parameters, Timestamps - all inline -->
+                        <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500 dark:text-gray-500">
+                            {{if $task.DependsOnTasks}}
+                            <span class="flex items-center gap-1">
+                                <span class="text-gray-600 dark:text-gray-600">Deps:</span>
+                                <span class="flex gap-0.5" id="deps-{{$idx}}" data-deps='{{json $task.DependsOnTasks}}' data-task-id="{{$task.TaskID}}"></span>
+                            </span>
+                            {{if or $task.Parameters (or $task.ActualStartTime $task.ActualEndTime)}}<span class="text-gray-400 dark:text-gray-600">|</span>{{end}}
+                            {{end}}
+                            {{if $task.Parameters}}
+                            <span id="params-{{$idx}}" class="flex flex-wrap gap-x-2"></span>
+                            {{if or $task.ActualStartTime $task.ActualEndTime}}<span class="text-gray-400 dark:text-gray-600">|</span>{{end}}
+                            {{end}}
+                            <!-- Timestamps inline -->
+                            {{if or $task.ActualStartTime $task.ActualEndTime}}
+                            <span class="task-timestamps flex items-center gap-2">
+                                <span class="task-start-time flex items-center gap-0.5 {{if not $task.ActualStartTime}}hidden{{end}}">
+                                    <span class="material-symbols-outlined text-green-600" style="font-size: 10px;">play_arrow</span>
+                                    <span class="task-start-value">{{if $task.ActualStartTime}}{{$task.ActualStartTime.Format "15:04:05"}}{{end}}</span>
+                                </span>
+                                <span class="task-end-time flex items-center gap-0.5 {{if not $task.ActualEndTime}}hidden{{end}}">
+                                    <span class="task-end-icon material-symbols-outlined {{if eq $task.Status "completed"}}text-green-600{{else}}text-red-600{{end}}" style="font-size: 10px;">
+                                        {{if eq $task.Status "completed"}}check_circle{{else if eq $task.Status "failed"}}error{{else}}stop_circle{{end}}
+                                    </span>
+                                    <span class="task-end-value">{{if $task.ActualEndTime}}{{$task.ActualEndTime.Format "15:04:05"}}{{end}}</span>
+                                </span>
+                                <span class="task-duration flex items-center gap-0.5 {{if not (and $task.ActualStartTime $task.ActualEndTime)}}hidden{{end}}">
+                                    <span class="material-symbols-outlined text-blue-500" style="font-size: 10px;">schedule</span>
+                                    <span class="task-duration-value text-gray-400" id="duration-{{$idx}}" {{if $task.ActualStartTime}}data-start="{{$task.ActualStartTime.Unix}}"{{end}} {{if $task.ActualEndTime}}data-end="{{$task.ActualEndTime.Unix}}"{{end}}></span>
+                                </span>
+                            </span>
+                            {{end}}
+                        </div>
+
+                        <!-- Error Message Inline for Failed Tasks - Compact -->
+                        <div class="task-error-message mt-2 p-2 bg-red-100 dark:bg-red-900/30 rounded border border-red-500 {{if ne $task.Status "failed"}}hidden{{end}}">
+                            <p class="text-xs text-red-700 dark:text-red-300 flex items-center gap-1">
+                                <span class="material-symbols-outlined" style="font-size: 12px;">error</span>
+                                {{if $task.ErrorMessage}}{{$task.ErrorMessage}}{{else}}No error details available{{end}}
+                            </p>
+                        </div>
+
+                        <!-- Blocked Message - Compact (no unblock button - actions happen on KOS only) -->
+                        <div class="task-blocked-message mt-2 p-2 bg-amber-100 dark:bg-amber-900/30 rounded border border-amber-500 {{if ne $task.Status "blocked"}}hidden{{end}}">
+                            <p class="text-xs text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                                <span class="material-symbols-outlined" style="font-size: 12px;">warning</span>
+                                {{if $task.ErrorMessage}}{{$task.ErrorMessage}}{{else}}Task is blocked - waiting for resource{{end}}
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Status Badge - Compact -->
+                    <div class="flex-shrink-0">
+                        <span class="task-status-badge px-2 py-0.5 text-xs font-semibold rounded-lg inline-flex items-center gap-1
+                            {{if eq $task.Status "completed"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
+                            {{else if or (eq $task.Status "running") (eq $task.Status "in_progress")}}bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400
+                            {{else if eq $task.Status "blocked"}}bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400
+                            {{else if eq $task.Status "failed"}}bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400
+                            {{else if or (eq $task.Status "pending") (eq $task.Status "ready")}}bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400
+                            {{else}}bg-gray-100 dark:bg-gray-900/30 text-gray-700 dark:text-gray-400{{end}}">
+                            <span class="material-symbols-outlined task-status-icon" style="font-size: 12px;">
+                                {{if eq $task.Status "completed"}}check_circle
+                                {{else if or (eq $task.Status "running") (eq $task.Status "in_progress")}}sync
+                                {{else if eq $task.Status "blocked"}}hourglass_empty
+                                {{else if eq $task.Status "failed"}}error
+                                {{else if or (eq $task.Status "pending") (eq $task.Status "ready")}}schedule
+                                {{else}}pending{{end}}
+                            </span>
+                            <span class="task-status-text">{{$task.Status}}</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        {{else}}
+        <div class="text-center py-12 text-gray-500 dark:text-gray-400">
+            <span class="material-symbols-outlined text-4xl mb-2">inbox</span>
+            <p>No tasks found for this order</p>
+        </div>
+        {{end}}
+    </div>
 </div>
 
+<!-- JavaScript for task rendering -->
 <script>
-function cancelOrder() {
-    if (!confirm('Are you sure you want to cancel this order?')) return;
+document.addEventListener('DOMContentLoaded', function() {
+    // Calculate and set progress bar width
+    const progressBar = document.getElementById('order-progress-bar');
+    if (progressBar) {
+        const completed = parseInt(progressBar.getAttribute('data-completed'));
+        const total = parseInt(progressBar.getAttribute('data-total'));
+        const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+        progressBar.style.width = percentage + '%';
+    }
 
-    fetch('/api/v1/orders/{{.Order.ID}}/cancel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-    })
-    .then(response => {
-        if (response.ok) {
-            window.location.reload();
-        } else {
-            return response.json().then(data => {
-                throw new Error(data.error?.message || 'Failed to cancel order');
-            });
-        }
-    })
-    .catch(error => {
-        alert(error.message);
+    // Task parameters map - built from template
+    const taskParams = {
+        {{range $idx, $task := $tasks}}
+        {{if $task.Parameters}}
+        {{$idx}}: JSON.parse({{$task.Parameters | json}}),
+        {{end}}
+        {{end}}
+    };
+
+    // Ingredients map (may be empty if not provided by handler)
+    const ingredients = {{if .Ingredients}}{{json .Ingredients}}{{else}}{}{{end}};
+
+    // Build task map for quick lookup by TaskID
+    const allTasks = [
+        {{range $idx, $task := $tasks}}
+        {
+            idx: {{$idx}},
+            taskId: '{{$task.TaskID}}',
+            stepNumber: {{if $task.StepNumber}}{{$task.StepNumber}}{{else}}null{{end}},
+            status: '{{$task.Status}}'
+        },
+        {{end}}
+    ];
+
+    const taskMap = {};
+    allTasks.forEach(task => {
+        taskMap[task.taskId] = task;
     });
-}
+
+    // Render dependencies - compact version
+    const depsContainers = document.querySelectorAll('[data-deps]');
+
+    depsContainers.forEach(container => {
+        try {
+            const depsJson = container.getAttribute('data-deps');
+            const depTaskIds = JSON.parse(depsJson);
+
+            depTaskIds.forEach(depTaskId => {
+                const depTask = taskMap[depTaskId];
+                if (!depTask) return;
+
+                // Determine badge color based on status
+                let bgColor;
+                if (depTask.status === 'completed') {
+                    bgColor = 'bg-green-500';
+                } else if (depTask.status === 'running' || depTask.status === 'in_progress') {
+                    bgColor = 'bg-orange-500';
+                } else if (depTask.status === 'failed') {
+                    bgColor = 'bg-red-500';
+                } else {
+                    bgColor = 'bg-blue-500';
+                }
+
+                const badge = document.createElement('div');
+                badge.className = `w-4 h-4 rounded-full flex items-center justify-center text-white font-bold ${bgColor}`;
+                badge.style.fontSize = '9px';
+                badge.textContent = depTask.stepNumber || '?';
+                container.appendChild(badge);
+            });
+        } catch (error) {
+            console.error('Error rendering dependencies:', error);
+        }
+    });
+
+    // Format parameter key from snake_case to Title Case
+    function formatKey(key) {
+        return key.split('_').map(word =>
+            word.charAt(0).toUpperCase() + word.slice(1)
+        ).join(' ');
+    }
+
+    // Format duration in seconds to human-readable format
+    function formatDuration(seconds) {
+        if (seconds < 60) {
+            return `${seconds}s`;
+        } else if (seconds < 3600) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+        } else {
+            const hours = Math.floor(seconds / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+        }
+    }
+
+    // Render parameters for each task - compact inline version
+    Object.keys(taskParams).forEach(taskIdx => {
+        const params = taskParams[taskIdx];
+        const container = document.getElementById(`params-${taskIdx}`);
+
+        if (!container || !params || Object.keys(params).length === 0) {
+            return;
+        }
+
+        Object.keys(params).forEach(key => {
+            const value = params[key];
+
+            // Skip ingredient_name since we already resolve ingredient_id to name
+            if (key === 'ingredient_name') {
+                return;
+            }
+
+            const paramSpan = document.createElement('span');
+
+            // Format key
+            let keyText;
+            if (key === 'ingredient_id') {
+                keyText = 'Ingredient';
+            } else {
+                keyText = formatKey(key);
+            }
+
+            // Format value
+            let valueText;
+            if (key === 'duration_sec') {
+                valueText = formatDuration(value);
+            } else if (key === 'ingredient_id') {
+                valueText = ingredients[value] || `ID: ${value}`;
+            } else if (typeof value === 'object') {
+                valueText = JSON.stringify(value);
+            } else {
+                valueText = value;
+            }
+
+            paramSpan.innerHTML = `<span class="text-gray-600 dark:text-gray-600">${keyText}:</span> ${valueText}`;
+            container.appendChild(paramSpan);
+        });
+    });
+
+    // L2 tasks from synced data (embedded in each task)
+    const l2TasksData = {
+        {{range $idx, $task := $tasks}}
+        {{if $task.L2Tasks}}
+        '{{$task.TaskID}}': {{json $task.L2Tasks}},
+        {{end}}
+        {{end}}
+    };
+
+    // Render L2 subtasks for each task
+    function renderL2Tasks(taskId, container) {
+        const l2Tasks = l2TasksData[taskId] || [];
+
+        if (!l2Tasks || l2Tasks.length === 0) {
+            // Show "No subtasks" in italics
+            const noSubtasks = document.createElement('span');
+            noSubtasks.className = 'text-gray-600 dark:text-gray-600 italic';
+            noSubtasks.textContent = 'No subtasks';
+            container.appendChild(noSubtasks);
+            return;
+        }
+
+        // Clear container and set compact inline styles
+        container.innerHTML = '';
+        container.className = 'flex items-center gap-1 text-xs flex-wrap';
+
+        l2Tasks.forEach((l2Task, index) => {
+            // Create compact subtask badge
+            const badge = document.createElement('div');
+            badge.className = 'inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-surface-highlight border border-gray-200 dark:border-border-dark';
+
+            const icon = document.createElement('span');
+            icon.className = 'material-symbols-outlined';
+            icon.style.fontSize = '10px';
+
+            if (l2Task.is_completed) {
+                icon.textContent = 'check_circle';
+                icon.className += ' text-green-600';
+            } else if (l2Task.is_in_progress) {
+                icon.textContent = 'sync';
+                icon.className += ' text-orange-600';
+            } else {
+                icon.textContent = 'pending';
+                icon.className += ' text-gray-400 dark:text-gray-500';
+            }
+
+            const text = document.createElement('span');
+            text.className = 'text-gray-600 dark:text-gray-400';
+            text.textContent = formatL2Action(l2Task.l2_action);
+
+            badge.appendChild(icon);
+            badge.appendChild(text);
+            container.appendChild(badge);
+
+            // Add small arrow if not last
+            if (index < l2Tasks.length - 1) {
+                const arrow = document.createElement('span');
+                arrow.className = 'material-symbols-outlined text-gray-400 dark:text-gray-600';
+                arrow.style.fontSize = '8px';
+                arrow.textContent = 'arrow_forward';
+                container.appendChild(arrow);
+            }
+        });
+    }
+
+    function formatL2Action(action) {
+        return action.split('_').map(word =>
+            word.charAt(0).toUpperCase() + word.slice(1)
+        ).join(' ');
+    }
+
+    // Render L2 tasks for all tasks on page load
+    function loadAllL2Tasks() {
+        const l2Containers = document.querySelectorAll('[id^="l2-tasks-"]');
+
+        l2Containers.forEach(container => {
+            const taskId = container.getAttribute('data-task-id');
+            if (taskId) {
+                renderL2Tasks(taskId, container);
+            }
+        });
+    }
+
+    // Calculate and display actual durations
+    function calculateDurations() {
+        const durationElements = document.querySelectorAll('[id^="duration-"]');
+
+        durationElements.forEach(element => {
+            const startTime = parseInt(element.getAttribute('data-start'));
+            const endTime = parseInt(element.getAttribute('data-end'));
+
+            if (startTime && endTime) {
+                const durationSeconds = endTime - startTime;
+                element.textContent = formatDuration(durationSeconds);
+            }
+        });
+    }
+
+    // Start loading L2 tasks
+    loadAllL2Tasks();
+
+    // Calculate durations on page load
+    calculateDurations();
+});
 </script>
 {{end}}
