@@ -16,7 +16,7 @@
     </div>
 
     <!-- Stats Cards (clickable filters) -->
-    <div id="stats-filters" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+    <div id="stats-filters" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3">
         <button type="button" data-filter="all" class="stats-filter bg-white dark:bg-surface-dark rounded-xl shadow-sm border-2 border-primary-600 p-4 text-left cursor-pointer transition-colors">
             <p class="text-2xl font-bold text-gray-900 dark:text-white">{{.Stats.Total}}</p>
             <p class="text-xs text-gray-500 dark:text-gray-400">Total</p>
@@ -25,9 +25,13 @@
             <p class="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{{.Stats.Pending}}</p>
             <p class="text-xs text-gray-500 dark:text-gray-400">Pending</p>
         </button>
-        <button type="button" data-filter="sent_to_kos" class="stats-filter bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4 text-left cursor-pointer hover:border-purple-400 transition-colors">
-            <p class="text-2xl font-bold text-purple-600 dark:text-purple-400">{{.Stats.SentToKOS}}</p>
-            <p class="text-xs text-gray-500 dark:text-gray-400">Sent to KOS</p>
+        <button type="button" data-filter="accepted" class="stats-filter bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4 text-left cursor-pointer hover:border-purple-400 transition-colors">
+            <p class="text-2xl font-bold text-purple-600 dark:text-purple-400">{{.Stats.Accepted}}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Accepted</p>
+        </button>
+        <button type="button" data-filter="scheduled" class="stats-filter bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4 text-left cursor-pointer hover:border-indigo-400 transition-colors">
+            <p class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{{.Stats.Scheduled}}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Scheduled</p>
         </button>
         <button type="button" data-filter="in_progress" class="stats-filter bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4 text-left cursor-pointer hover:border-blue-400 transition-colors">
             <p class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{.Stats.InProgress}}</p>
@@ -88,11 +92,12 @@
                     <span class="px-2 py-0.5 text-xs font-medium rounded-full
                         {{if eq .Status "completed"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
                         {{else if eq .Status "in_progress"}}bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400
-                        {{else if eq .Status "sent_to_kos"}}bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400
+                        {{else if eq .Status "accepted"}}bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400
+                        {{else if eq .Status "scheduled"}}bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400
                         {{else if eq .Status "failed"}}bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400
                         {{else if eq .Status "cancelled"}}bg-gray-100 dark:bg-surface-highlight text-gray-600 dark:text-gray-300
                         {{else}}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400{{end}}">
-                        {{if eq .Status "in_progress"}}cooking{{else if eq .Status "sent_to_kos"}}sent{{else}}{{.Status}}{{end}}
+                        {{if eq .Status "in_progress"}}cooking{{else}}{{.Status}}{{end}}
                     </span>
                 </div>
 

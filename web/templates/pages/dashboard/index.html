@@ -168,7 +168,12 @@
                     {{range .RecentKOS}}
                     <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                         <div class="flex items-center space-x-3">
-                            <div class="w-2 h-2 rounded-full {{if eq .Status "online"}}bg-green-500{{else if eq .Status "offline"}}bg-red-500{{else}}bg-yellow-500{{end}}"></div>
+                            <div class="w-2 h-2 rounded-full
+                                {{if eq .Status "online"}}bg-green-500
+                                {{else if eq .Status "offline"}}bg-red-500
+                                {{else if eq .Status "registered"}}bg-blue-500
+                                {{else if eq .Status "provisioned"}}bg-yellow-500
+                                {{else}}bg-gray-500{{end}}"></div>
                             <div>
                                 <p class="font-medium text-gray-900 dark:text-white">{{.Name}}</p>
                                 <p class="text-sm text-gray-500">{{.SiteName}}</p>
@@ -176,9 +181,11 @@
                         </div>
                         <div class="text-right">
                             <span class="px-2 py-1 text-xs font-medium rounded-full
-                                {{if eq .Status "online"}}bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300
-                                {{else if eq .Status "offline"}}bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300
-                                {{else}}bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300{{end}}">
+                                {{if eq .Status "online"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
+                                {{else if eq .Status "offline"}}bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400
+                                {{else if eq .Status "registered"}}bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400
+                                {{else if eq .Status "provisioned"}}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400
+                                {{else}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400{{end}}">
                                 {{.Status}}
                             </span>
                             {{if .LastHeartbeat}}
@@ -205,15 +212,18 @@
                     <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-surface-highlight rounded-lg">
                         <div>
                             <p class="font-medium text-gray-900 dark:text-white">{{.OrderReference}}</p>
-                            <p class="text-sm text-gray-500">{{.SiteName}} - {{.ItemCount}} items</p>
+                            <p class="text-sm text-gray-500">{{.RecipeName}}</p>
                         </div>
                         <div class="text-right">
                             <span class="px-2 py-1 text-xs font-medium rounded-full
-                                {{if eq .Status "completed"}}bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300
-                                {{else if eq .Status "pending"}}bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300
-                                {{else if eq .Status "in_progress"}}bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300
-                                {{else if eq .Status "failed"}}bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300
-                                {{else}}bg-gray-100 text-gray-700 dark:bg-gray-600 dark:text-gray-300{{end}}">
+                                {{if eq .Status "completed"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
+                                {{else if eq .Status "pending"}}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400
+                                {{else if eq .Status "accepted"}}bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400
+                                {{else if eq .Status "scheduled"}}bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400
+                                {{else if eq .Status "in_progress"}}bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400
+                                {{else if eq .Status "failed"}}bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400
+                                {{else if eq .Status "cancelled"}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400
+                                {{else}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400{{end}}">
                                 {{.Status}}
                             </span>
                             <p class="text-xs text-gray-500 mt-1">{{.CreatedAt}}</p>

@@ -553,7 +553,7 @@ func (w *WebHandlers) Dashboard(c *gin.Context) {
 					"ID":            kos.ID.Hex(),
 					"Name":          kos.Name,
 					"SiteName":      "", // TODO: Resolve site name
-					"Status":        kos.Status,
+					"Status":        string(kos.Status),
 					"LastHeartbeat": lastHeartbeat,
 				})
 			}
@@ -571,7 +571,7 @@ func (w *WebHandlers) Dashboard(c *gin.Context) {
 					"ID":             order.ID.Hex(),
 					"OrderReference": order.OrderReference,
 					"RecipeName":     order.RecipeName,
-					"Status":         order.Status,
+					"Status":         string(order.Status),
 					"CreatedAt":      formatRelativeTime(order.CreatedAt),
 				})
 			}
@@ -1502,7 +1502,7 @@ func (w *WebHandlers) Orders(c *gin.Context) {
 
 	orderData := []gin.H{}
 	sites := []gin.H{}
-	var pendingCount, sentToKOSCount, inProgressCount, completedCount, failedCount int
+	var pendingCount, acceptedCount, scheduledCount, inProgressCount, completedCount, failedCount int
 
 	if tenantIDStr != "" {
 		tenantID, err := primitive.ObjectIDFromHex(tenantIDStr)
@@ -1512,15 +1512,17 @@ func (w *WebHandlers) Orders(c *gin.Context) {
 			for _, o := range orders {
 				// Count by status
 				switch o.Status {
-				case "pending":
+				case models.OrderStatusPending:
 					pendingCount++
-				case "sent_to_kos":
-					sentToKOSCount++
-				case "in_progress":
+				case models.OrderStatusAccepted:
+					acceptedCount++
+				case models.OrderStatusScheduled:
+					scheduledCount++
+				case models.OrderStatusInProgress:
 					inProgressCount++
-				case "completed":
+				case models.OrderStatusCompleted:
 					completedCount++
-				case "failed":
+				case models.OrderStatusFailed:
 					failedCount++
 				}
 
@@ -1537,7 +1539,7 @@ func (w *WebHandlers) Orders(c *gin.Context) {
 					"SiteID":         o.SiteID.Hex(),
 					"SiteName":       siteName,
 					"CustomerName":   o.CustomerName,
-					"Status":         o.Status,
+					"Status":         string(o.Status),
 					"Priority":       o.Priority,
 					"CreatedAt":      formatRelativeTime(o.CreatedAt),
 					"CreatedAtUnix":  o.CreatedAt.Unix(),
@@ -1555,7 +1557,7 @@ func (w *WebHandlers) Orders(c *gin.Context) {
 		}
 	}
 
-	totalCount := pendingCount + sentToKOSCount + inProgressCount + completedCount + failedCount
+	totalCount := pendingCount + acceptedCount + scheduledCount + inProgressCount + completedCount + failedCount
 
 	data := gin.H{
 		"CurrentPage": "orders",
@@ -1564,7 +1566,8 @@ func (w *WebHandlers) Orders(c *gin.Context) {
 		"Stats": gin.H{
 			"Total":      totalCount,
 			"Pending":    pendingCount,
-			"SentToKOS":  sentToKOSCount,
+			"Accepted":   acceptedCount,
+			"Scheduled":  scheduledCount,
 			"InProgress": inProgressCount,
 			"Completed":  completedCount,
 			"Failed":     failedCount,
