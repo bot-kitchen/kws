@@ -1174,6 +1174,7 @@ func (w *WebHandlers) Recipes(c *gin.Context) {
 	tenantIDStr := middleware.GetEffectiveTenantID(c)
 
 	recipeData := []gin.H{}
+	siteData := []gin.H{}
 	var publishedCount, draftCount int
 
 	// Only load recipes if we have a valid tenant ObjectID (not "platform")
@@ -1203,12 +1204,24 @@ func (w *WebHandlers) Recipes(c *gin.Context) {
 					"TotalTime":   r.PrepTime + r.CookTime,
 				})
 			}
+
+			// Load sites for the Cook modal
+			sites, _, _ := w.handlers.repos.Site.ListByTenant(ctx, tenantID, 1, 100)
+			for _, s := range sites {
+				siteData = append(siteData, gin.H{
+					"ID":       s.ID.Hex(),
+					"Name":     s.Name,
+					"RegionID": s.RegionID.Hex(),
+				})
+			}
 		}
 	}
 
 	data := gin.H{
 		"CurrentPage":    "recipes",
 		"Recipes":        recipeData,
+		"Sites":          siteData,
+		"TenantID":       tenantIDStr,
 		"PublishedCount": publishedCount,
 		"DraftCount":     draftCount,
 	}
