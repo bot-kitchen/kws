@@ -1029,7 +1029,7 @@ func (w *WebHandlers) KOSInstances(c *gin.Context) {
 					"ID":            kos.ID.Hex(),
 					"Name":          kos.Name,
 					"SiteName":      siteName,
-					"Status":        kos.Status,
+					"Status":        string(kos.Status),
 					"Version":       kos.Version,
 					"LastHeartbeat": lastHeartbeat,
 					"Kitchens":      kos.Kitchens,

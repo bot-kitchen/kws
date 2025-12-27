@@ -34,92 +34,46 @@
     </div>
 
     <!-- KOS Grid -->
-    <div id="kos-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div id="kos-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {{range .KOSInstances}}
-        <div class="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-6">
-            <div class="flex items-start justify-between mb-4">
-                <div class="flex items-center">
-                    <div class="w-12 h-12 rounded-lg flex items-center justify-center
-                        {{if eq .Status "online"}}bg-green-100 dark:bg-green-900/50
-                        {{else if eq .Status "offline"}}bg-red-100 dark:bg-red-900/50
-                        {{else}}bg-gray-100 dark:bg-gray-700{{end}}">
-                        <span class="material-symbols-outlined text-2xl
+        <a href="/kos/{{.ID}}" class="block bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-gray-200 dark:border-border-dark p-4 hover:border-primary dark:hover:border-primary hover:shadow-md transition-all cursor-pointer">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg flex items-center justify-center
+                        {{if eq .Status "online"}}bg-green-100 dark:bg-green-900/30
+                        {{else if eq .Status "offline"}}bg-red-100 dark:bg-red-900/30
+                        {{else if eq .Status "registered"}}bg-blue-100 dark:bg-blue-900/30
+                        {{else if eq .Status "provisioned"}}bg-yellow-100 dark:bg-yellow-900/30
+                        {{else}}bg-gray-100 dark:bg-gray-800{{end}}">
+                        <span class="material-symbols-outlined text-xl
                             {{if eq .Status "online"}}text-green-600 dark:text-green-400
                             {{else if eq .Status "offline"}}text-red-600 dark:text-red-400
+                            {{else if eq .Status "registered"}}text-blue-600 dark:text-blue-400
+                            {{else if eq .Status "provisioned"}}text-yellow-600 dark:text-yellow-400
                             {{else}}text-gray-600 dark:text-gray-400{{end}}">
-                            {{if eq .Status "online"}}cloud_done{{else if eq .Status "offline"}}cloud_off{{else}}cloud_queue{{end}}
+                            {{if eq .Status "online"}}cloud_done{{else if eq .Status "offline"}}cloud_off{{else if eq .Status "registered"}}cloud_sync{{else}}cloud_queue{{end}}
                         </span>
                     </div>
-                    <div class="ml-4">
-                        <h3 class="font-semibold text-gray-900 dark:text-white">{{.Name}}</h3>
-                        <p class="text-sm text-gray-500">{{.SiteName}}</p>
+                    <div class="min-w-0">
+                        <h3 class="font-semibold text-gray-900 dark:text-white text-sm truncate">{{.Name}}</h3>
+                        <p class="text-xs text-gray-500 truncate">{{if .SiteName}}{{.SiteName}}{{else}}No site{{end}}</p>
                     </div>
                 </div>
-                <span class="px-2 py-1 text-xs font-medium rounded-full
-                    {{if eq .Status "online"}}bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300
-                    {{else if eq .Status "offline"}}bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300
-                    {{else if eq .Status "pending"}}bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300
-                    {{else}}bg-gray-100 text-gray-700 dark:bg-gray-600 dark:text-gray-300{{end}}">
+                <span class="shrink-0 px-2 py-0.5 text-xs font-medium rounded-full
+                    {{if eq .Status "online"}}bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400
+                    {{else if eq .Status "offline"}}bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400
+                    {{else if eq .Status "registered"}}bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400
+                    {{else if eq .Status "provisioned"}}bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400
+                    {{else}}bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400{{end}}">
                     {{.Status}}
                 </span>
             </div>
 
-            <div class="space-y-3 mb-4">
-                <div class="flex items-center justify-between text-sm">
-                    <span class="text-gray-500">Version</span>
-                    <span class="text-gray-900 dark:text-white">{{if .Version}}{{.Version}}{{else}}—{{end}}</span>
-                </div>
-                <div class="flex items-center justify-between text-sm">
-                    <span class="text-gray-500">Last Heartbeat</span>
-                    <span class="text-gray-900 dark:text-white">{{if .LastHeartbeat}}{{.LastHeartbeat}}{{else}}Never{{end}}</span>
-                </div>
-                <div class="flex items-center justify-between text-sm">
-                    <span class="text-gray-500">Kitchens</span>
-                    <span class="text-gray-900 dark:text-white">{{len .Kitchens}}</span>
-                </div>
+            <div class="flex items-center justify-between text-xs text-gray-500 dark:text-text-secondary">
+                <span>{{if .Version}}v{{.Version}}{{else}}—{{end}}</span>
+                <span>{{if .LastHeartbeat}}{{.LastHeartbeat}}{{else}}Never{{end}}</span>
             </div>
-
-            {{if eq .Status "online"}}
-            <div class="grid grid-cols-3 gap-3 mb-4">
-                <div class="bg-gray-50 dark:bg-surface-highlight rounded-lg p-2 text-center">
-                    <p class="text-xs text-gray-500 dark:text-text-secondary">CPU</p>
-                    <p class="text-sm font-medium text-gray-900 dark:text-white">{{.CPUPercent}}%</p>
-                </div>
-                <div class="bg-gray-50 dark:bg-surface-highlight rounded-lg p-2 text-center">
-                    <p class="text-xs text-gray-500 dark:text-text-secondary">Memory</p>
-                    <p class="text-sm font-medium text-gray-900 dark:text-white">{{.MemoryPercent}}%</p>
-                </div>
-                <div class="bg-gray-50 dark:bg-surface-highlight rounded-lg p-2 text-center">
-                    <p class="text-xs text-gray-500 dark:text-text-secondary">Orders</p>
-                    <p class="text-sm font-medium text-gray-900 dark:text-white">{{.ActiveOrders}}</p>
-                </div>
-            </div>
-            {{end}}
-
-            <div class="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-border-dark">
-                <div class="flex items-center space-x-2">
-                    <a href="/kos/{{.ID}}"
-                       class="p-2 text-gray-500 hover:text-primary hover:bg-gray-100 dark:hover:bg-surface-highlight rounded-lg">
-                        <span class="material-symbols-outlined text-lg">visibility</span>
-                    </a>
-                    <button onclick="openEditModal('{{.ID}}')"
-                            class="p-2 text-gray-500 hover:text-primary hover:bg-gray-100 dark:hover:bg-surface-highlight rounded-lg">
-                        <span class="material-symbols-outlined text-lg">edit</span>
-                    </button>
-                </div>
-                {{if eq .Status "pending"}}
-                <button onclick="provisionKOS('{{.ID}}')"
-                        class="px-3 py-1 text-sm bg-primary text-white rounded-lg hover:bg-primary-hover">
-                    Provision
-                </button>
-                {{else if eq .Status "provisioned"}}
-                <button onclick="downloadCerts('{{.ID}}')"
-                        class="px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700">
-                    Download Certs
-                </button>
-                {{end}}
-            </div>
-        </div>
+        </a>
         {{else}}
         <div class="col-span-full text-center py-12">
             <span class="material-symbols-outlined text-6xl text-gray-400 mb-4">devices</span>
@@ -137,18 +91,6 @@
 <script>
 function openCreateModal() {
     window.location.href = '/kos/new';
-}
-
-function openEditModal(id) {
-    window.location.href = '/kos/' + id + '/edit';
-}
-
-function provisionKOS(id) {
-    window.location.href = '/api/v1/kos-instances/' + id + '/provisioning-bundle';
-}
-
-function downloadCerts(id) {
-    window.location.href = '/api/v1/kos-instances/' + id + '/provisioning-bundle';
 }
 </script>
 {{end}}
